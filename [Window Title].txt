@@ -1,0 +1,26 @@
+[Window Title]
+Visual Studio Code
+
+[Main Instruction]
+Do you want to save the changes you made to import serial?
+
+[Content]
+Your changes will be lost if you don't save them.
+
+[Save] [Don't Save] [Cancel][Window Title]
+Visual Studio Code
+
+[Main Instruction]
+Do you want to save the changes you made to import serial?
+
+[Content]
+Your changes will be lost if you don't save them.
+
+[Save] [Don't Save] [Cancel][Window Title]
+Visual Studio Code
+
+[Main Instruction]
+Do you want to save the changes you made to import serial?
+
+[Content]
+Your changes will be lost if you don't save them.__
