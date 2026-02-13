@@ -3,13 +3,18 @@
 #include <math.h>
 #include <RF24.h>
 #include <SPI.h>
+#include <atomic>
+#include <climits>
+
+SemaphoreHandle_t xMutex;
+void Radiocore(void * Pvparameter);
 
 struct ControlData {
-   float thr; //1000 à 2000
-   float yaw;
-   float pitch;
-   float roll;     
-   bool armed;      
+  float thr; //1000 à 1600
+  float yaw; // 0 à 100
+  float pitch;
+  float roll;     
+  bool armed;      
 };
 
 struct DroneData {
@@ -19,6 +24,17 @@ struct DroneData {
   float ActualYaw;
 };
  
+struct Order {
+  std::atomic <float> thr;
+  std::atomic <float> pitch;
+  std::atomic <float> roll;
+  std::atomic <float> yaw;
+  std::atomic <bool> armed;
+};
+
+  ControlData Packet; // receive from GS
+  DroneData dronepacket; // send to GS
+  Order order;
 class IMU {
   private:
     // MPU-6050 
@@ -46,14 +62,13 @@ class IMU {
         // Demande 14 octets de donnees brutes (Accel X,Y,Z, Temp, Gyro X,Y,Z)
         Wire.requestFrom(0x68, 14); // disambiguate overload
 
-        // Lecture des données brutes (chaque valeur est sur 2 octets = un int)
         // Note : MPU-6050 stocke les données en 'High Byte' puis 'Low Byte'
         accelX = (int16_t)(Wire.read() << 8 | Wire.read()); 
         accelY = (int16_t)(Wire.read() << 8 | Wire.read());
         accelZ = (int16_t)(Wire.read() << 8 | Wire.read());
         
         // pour ignorer Lecture de la température 
-        Wire.read() << 8 | Wire.read(); // Skip Temp
+        int16_t temp = (Wire.read() << 8) | Wire.read();
         
         gyroX = (int16_t)(Wire.read() << 8 | Wire.read()); 
         gyroY = (int16_t)(Wire.read() << 8 | Wire.read());
@@ -77,6 +92,7 @@ class IMU {
     //communication
     void wire_begin(int sda, int scl) {
       Wire.begin(sda, scl);
+      Wire.setClock(400000);
       Wire.beginTransmission(0x68); //commmencer
       Wire.write(0x6B); //reveil
       Wire.write(0x00); //lecture
@@ -87,11 +103,10 @@ class IMU {
   }
   
 
-
   IMU() { 
       angleRoll = 0.0;
       anglePitch = 0.0;
-      tempsPrecedent = millis();
+      tempsPrecedent = micros();
     }
     
     float MettreAjourmesures() {
@@ -111,10 +126,14 @@ class IMU {
 
         unsigned long tempsActuel = micros();
         float diffTemps = tempsActuel - tempsPrecedent;
+        if (tempsActuel < tempsPrecedent) {
+           diffTemps = (ULONG_MAX - tempsPrecedent) + tempsActuel;
+        }
         tempsPrecedent = tempsActuel;
         float dt = diffTemps/1000000.0;
-        
-
+          if (isnan(dt) || isinf(dt) || dt > 0.1f) {
+              dt = 0.004f; // Valeur sécuritaire
+          }
         //projection de l'accel : 
         float angleAccelRoll = atan2(accelY,accelZ) * 180/M_PI;
         float angleAccelPitch = atan2(-accelX,sqrt(accelY*accelY+accelZ*accelZ)) * 180/M_PI;
@@ -125,12 +144,12 @@ class IMU {
         angleYaw += (gyroZ*dt ); // accel Z n'a pas de projection 
         return dt;
       } 
-
   float getRoll() { return angleRoll; }
   float getPitch() { return anglePitch; }
   float getYaw() { return angleYaw; }
           
 };
+IMU monIMU;
 
 class Emitor_receptor { // Récepteur RF24
   private:
@@ -152,12 +171,11 @@ class Emitor_receptor { // Récepteur RF24
         if (radio.available()) {
             radio.read(&packet, sizeof(packet));
             return true;
-        }        
+        } else return false;        
     }
     bool sendPacket(const DroneData& packetDrone) { // send to GS
         dernierEnvoi = millis();
         radio.stopListening();
-        radio.openWritingPipe(address);
         bool success = radio.write(&packetDrone, sizeof(packetDrone));
         radio.startListening();
         return success;
@@ -170,10 +188,10 @@ class Emitor_receptor { // Récepteur RF24
         }
     } 
 };
+Emitor_receptor radio;
 
 
 class moteur {
-
   private :
   const int Moteur_pin;
   float vitesseMoteur;
@@ -204,7 +222,6 @@ class moteur {
       vitesseMoteur = constrain(vitesseRecue, vitesseMin, vitesseMax);
     }
   }
-
 };
 
 class mixMotor {
@@ -232,13 +249,16 @@ class mixMotor {
     
     }
 
+    
   void appliquer(float thr, float p, float r,  float y) {
-    m_ag.vitCtrl(thr + p + r + y);
-    m_ad.vitCtrl(thr + p - r - y);
-    m_dg.vitCtrl(thr - p + r - y);
-    m_dd.vitCtrl(thr - p - r + y);
+    thr = constrain(thr, 1000,1600);p = constrain(p, 0,100);r = constrain(r, 0,100);y = constrain(y, 0,100);
+    m_ag.vitCtrl(constrain(thr + p + r + y, 1000, 2000));
+    m_ad.vitCtrl(constrain(thr + p - r - y, 1000, 2000)); 
+    m_dg.vitCtrl(constrain(thr - p + r - y, 1000, 2000)); 
+    m_dd.vitCtrl(constrain(thr - p - r + y, 1000, 2000));
   }
 };
+mixMotor monMix;
 
 class PID {
   private :
@@ -250,8 +270,12 @@ class PID {
   PID(float p, float i,float d) : kp(p), ki(i), kd(d) {}
 
   float calcErreur(float demand, float mesure, float dt) {
-    float erreur = demand -  mesure ;
-    
+
+    if (isnan(mesure) || isinf(mesure)) {
+    return 0.0f; // Retourne 0 si mesure invalide
+    }
+    float erreur = demand - mesure;
+
     float P = erreur * kp;
    
     sumErreur += erreur * dt ;
@@ -260,7 +284,7 @@ class PID {
     float I = sumErreur *ki ;
 
     float D =0;
-    if (dt > 0) D = kd * (erreur-erreurPre)/dt;
+    if (dt > 0.0001f) D = kd * (erreur-erreurPre)/dt;
     erreurPre = erreur;
 
     return P + I + D; 
@@ -297,76 +321,115 @@ class failsafe {
       if (criticalLoss() ) {
         mixer.stopTout();
       } else if (temporaryLoss() ) {
-        mixer.appliquer(1500, 0, 0, 0); // stationnaire
+        mixer.appliquer(1000, 0, 0, 0); // stationnaire
     } else {
         // normal operation, do nothing
       }
     }
 };
 
-IMU monIMU;
+
+failsafe monFailsafe(1000, 10000);
+
+class update_data {
+  private :
+  std::atomic <unsigned long> dernier_update {0};
+  const unsigned long delai_update;
+  std::atomic <bool> updated{false};
+  public :
+  update_data(unsigned long delaiupdate) : delai_update(delaiupdate) {}
+
+  void data(std::atomic <float> &THR,  std::atomic <float> &PITCH,  std::atomic <float> &ROLL,  std::atomic <float> &YAW,  std::atomic <bool> &ARMED) {
+   if (radio.receivePacket(Packet)) {
+     THR = Packet.thr;
+     PITCH = Packet.pitch;
+     ROLL = Packet.roll;
+     YAW = Packet.yaw;
+     ARMED = Packet.armed;
+    dernier_update = millis();
+    monFailsafe.updateSignalTime();
+   } 
+   if (millis()-dernier_update > delai_update) {
+    updated = false;
+   } else updated = true; 
+  }
+  bool UPDATED() const { return updated.load(); }
+};
+
+
 PID PIDroll(1.0, 0.0, 0.0);
 PID PIDpitch(1.0, 0.0, 0.0);
 PID PIDyaw(1.0, 0.0, 0.0);
 PID PIDthr(1.0, 0.0, 0.0);
 
 float dt;
-bool state_= false;
 
-mixMotor monMix;
-Emitor_receptor radio;
-failsafe monFailsafe(1000, 10000); // 1 second timeout, 10 second critical loss timeout
+update_data data(500);
+
 #define SDA_PIN 4
 #define SCL_PIN 5
 unsigned long tempsCyclePre = 0;
 const unsigned long PERIOD_CYCLE = 4000; // 250 Hz
 
+
+
 void setup() {
   Serial.begin(115200);
   monIMU.wire_begin(SDA_PIN, SCL_PIN);
-  radio.begin();
   monMix.start();
   monMix.arming();
+  xMutex = xSemaphoreCreateMutex();
+      xTaskCreatePinnedToCore(
+        Radiocore,
+        "radioCORE",
+        10000,
+        NULL,
+        1,
+        NULL,
+        0
+    );
 }
 
 void loop() {
-  ControlData Packet; // receive from GS
-  DroneData dronepacket; // send to GS
+
   static float r_order = 0;
   static float p_order = 0;
   static float y_order = 0;
   static float thr_order = 1000;
   static bool isArmed = false;
-  static float dt = 0.004;
+  static unsigned long last_arm;
 
 if (micros() - tempsCyclePre > PERIOD_CYCLE ){
   //mise a jour des mesures
-  dt = monIMU.MettreAjourmesures(); 
-  float mesureRoll = monIMU.getRoll();
-  float mesurePitch = monIMU.getPitch();
-  float mesureYaw = monIMU.getYaw();
 
-    if (radio.receivePacket(Packet)) {
-    //mise a jour commande
-    r_order = Packet.roll;
-    p_order = Packet.pitch;
-    y_order = Packet.yaw;
-    thr_order = Packet.thr;  
-    isArmed = Packet.armed; 
-    monFailsafe.updateSignalTime();
+//mise a jour commande
+if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
+    r_order = order.roll;
+    p_order = order.pitch;
+    y_order = order.yaw;
+    thr_order = order.thr;
+
+    if(order.armed && !isArmed) {
+      if (millis() - last_arm > 500 ) {isArmed = true; last_arm = millis();}
+    } else if (!order.armed && isArmed) {if (millis() - last_arm > 500 ) {isArmed = false; last_arm = millis();}}
+    xSemaphoreGive(xMutex);
   } else {
     //stabilistion en cas de perte
     r_order = 0;
     p_order = 0;
     y_order = 0;
     monFailsafe.failsafeAction(monMix);
-  }
+  }  
+  dt = monIMU.MettreAjourmesures(); 
+  float mesureRoll = monIMU.getRoll();
+  float mesurePitch = monIMU.getPitch();
+  float mesureYaw = monIMU.getYaw();
       // calculate correction
     float Rollcorr = PIDroll.calcErreur(r_order, mesureRoll, dt );
     float Yawcorr = PIDyaw.calcErreur(y_order, mesureYaw, dt);
     float Pitchcorr = PIDpitch.calcErreur(p_order, mesurePitch, dt);
+
     if (isArmed == true) {
-    monMix.arming();
      // apply motor mixing
      monMix.appliquer(thr_order, Pitchcorr, Rollcorr, Yawcorr );
   } else {
@@ -374,15 +437,31 @@ if (micros() - tempsCyclePre > PERIOD_CYCLE ){
   }
   // update GS
   tempsCyclePre = micros();
+  if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
   dronepacket.batteryVoltage = 11.1; // Example voltage
   dronepacket.ActualPitch = monIMU.getPitch();
   dronepacket.ActualRoll = monIMU.getRoll();
   dronepacket.ActualYaw = monIMU.getYaw();
-  radio.sendDroneData(dronepacket);
+  xSemaphoreGive(xMutex);
+    }
   //debug  
-  Serial.print(monIMU.getRoll());
-  Serial.println(monIMU.getPitch());
-  Serial.println(monIMU.getYaw());    
+  //Serial.print(monIMU.getRoll());
+  //Serial.println(monIMU.getPitch());
+  //Serial.println(monIMU.getYaw());    
   }
 }
 // note : l'obtention des mesures se fait en 1micros , les calculs et l'action se fait en 4micros
+
+void Radiocore(void * Pvparameter) {
+   radio.begin();
+   for(;;){
+    radio.receivePacket(Packet); 
+    if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(5)) == pdTRUE) {            
+       data.data(order.thr, order.pitch, order.roll, order.yaw, order.armed);
+      xSemaphoreGive(xMutex);
+      }
+      radio.sendDroneData(dronepacket);
+      vTaskDelay(4 / portTICK_PERIOD_MS);
+   }
+}
+

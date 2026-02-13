@@ -101,10 +101,6 @@ void setup(void) {
 }
 
 
-
-
-
-
 void loop() {
   if (controller.isConnected()) {
     XboxControlsState s;
@@ -117,7 +113,7 @@ void loop() {
     packet.pitch = constrain((s.rightStickY / 32768.0f) * 30, -30.0f, 30.0f);
     packet.roll = constrain((s.leftStickX / 32768.0f) * 30, -30.0f, 30.0f);
     packet.armed = s.xboxButton ? 1.0f : 0.0f;
-    Serial.printf("roll: %.2f, pitch: %.2f, yaw: %.2f, thr: %.2f, armed: %.2f\n",
+    //Serial.printf("roll: %.2f, pitch: %.2f, yaw: %.2f, thr: %.2f, armed: %.2f\n",
     s.leftStickX, s.leftStickY, s.rightStickX, s.rightStickY, s.leftTrigger, s.rightTrigger);
     // Send and receive packets using the alternate radio handler
    
@@ -126,20 +122,22 @@ void loop() {
     unsigned long batteryupadateInterval = 100000; // Intervalle de mise à jour de la batterie en millisecondes
     static unsigned long lastBatteryUpdate = 0;
 
-        if (radioAlternate->update(packet, packetDrone)){Serial.printf("ActualRoll: %.2f, ActualPitch: %.2f, ActualYaw: %.2f\n",
-        packetDrone.ActualRoll,
-        packetDrone.ActualPitch,
-        packetDrone.ActualYaw);
+        if (radioAlternate->update(packet, packetDrone)){
+        float roll = packetDrone.ActualRoll;
+        float pitch = packetDrone.ActualPitch;
+        float yaw = packetDrone.ActualYaw;
+        float battery = packetDrone.ActualBattery;
+        Serial.println("GS",roll,pitch,yaw);
 
         if (currentMillis - lastBatteryUpdate >= batteryupadateInterval) {
-            Serial.printf("Battery Voltage: %.2f V\n", packetDrone.batteryVoltage);
+            Serial.printf("GS",roll,pitch,yaw,battery);
             lastBatteryUpdate = currentMillis;
         }} else {
             Serial.println("No data received from drone");
         } 
-        
     
   } else {
     Serial.println("controller not connected");
   }
 }
+
