@@ -2,8 +2,10 @@
 #include <BLEGamepadClient.h>
 #include <RF24.h>
 #include <SPI.h>
+#include <atomic>
 
-
+SemaphoreHandle_t xMutex;
+void Radiocore(void * Pvparameter);
 
 RF24 radio( 4, 5); // CE, CSN pins
 struct dataPacket {
@@ -19,9 +21,28 @@ struct dataPacketDrone {
     float ActualPitch;
     float ActualRoll;
     float ActualYaw;
-    float ActualThrottle;
 };
 
+struct telemerie {
+    std::atomic <float> batteryVoltage;
+    std::atomic <float> ActualPitch;
+    std::atomic <float> ActualRoll;
+    std::atomic <float> ActualYaw;
+
+};
+
+struct Order {
+  std::atomic <float> thr;
+  std::atomic <float> pitch;
+  std::atomic <float> roll;
+  std::atomic <float> yaw;
+  std::atomic <bool> armed;
+};
+
+  dataPacket Packet; // receive from GS
+  dataPacketDrone packetDrone; // send to GS
+  Order order; // from gs shared data
+  telemerie tele; // from drone shared data
 
 class RadioEmitor_Receptor {
     private:
@@ -36,13 +57,13 @@ public:
         radio.setPALevel(RF24_PA_HIGH);
         radio.setChannel(channel);
     }
-    bool sendPacket(const dataPacket& packet) {
+    bool sendPacket(const dataPacket& Packet) {
         radio.openWritingPipe(PipelineAddressTX);
         radio.stopListening();
-        return radio.write(&packet, sizeof(packet));
+        return radio.write(&Packet, sizeof(Packet));
     }
-    bool radioWrite(const dataPacket& packet) {
-        return radio.write(&packet, sizeof(packet));
+    bool radioWrite(const dataPacket& Packet) {
+        return radio.write(&Packet, sizeof(Packet));
     }
     bool receivePacket( dataPacketDrone& packetDrone) {
         radio.openReadingPipe(1, PipelineAddressRX);
@@ -68,11 +89,11 @@ class RadioAlternateEmitor_Receptor {
     RadioEmitor_Receptor& radio;
 public:
     RadioAlternateEmitor_Receptor(RadioEmitor_Receptor& radio) : radio(radio) {}
-    bool update( dataPacket& packet, dataPacketDrone& packetDrone) {
+    bool update( dataPacket& Packet, dataPacketDrone& packetDrone) {
         unsigned long currentTime = millis();
 
         if (currentTime - lastSendTime >= sendInterval) {
-            radio.sendPacket(packet);
+            radio.sendPacket(Packet);
             lastSendTime = currentTime;
         }
         if (radio.receivePacket(packetDrone)) {
@@ -86,11 +107,33 @@ public:
     };
 };
 
+class update_data {
+  private :
+  std::atomic <unsigned long> dernier_update {0};
+  const unsigned long delai_update;
+  std::atomic <bool> updated{false};
+  public :
+  update_data(unsigned long delaiupdate) : delai_update(delaiupdate) {}
+
+  void data(std::atomic <float> &THR,  std::atomic <float> &PITCH,  std::atomic <float> &ROLL,  std::atomic <float> &YAW,  std::atomic <float> &BATTERY) {
+   if (RADIO->receivePacket(packetDrone)) {
+     PITCH = packetDrone.ActualPitch;
+     ROLL = packetDrone.ActualRoll;
+     YAW = packetDrone.ActualYaw;
+     BATTERY = packetDrone.batteryVoltage;
+    dernier_update = millis();
+   } 
+   if (millis()-dernier_update > delai_update) {
+    updated = false;
+   } else updated = true; 
+  }
+  bool UPDATED() const { return updated.load(); }
+};
+
 XboxController controller;
 
 RadioAlternateEmitor_Receptor* radioAlternate;
-dataPacket packet;
-dataPacketDrone packetDrone;
+
 
 void setup(void) {
   Serial.begin(115200);
@@ -98,46 +141,80 @@ void setup(void) {
   RADIO = new RadioEmitor_Receptor(100, 0xE8E8F0F0E1LL, 0xE8E8F0F0E2LL);
   RADIO->begin();
   radioAlternate = new RadioAlternateEmitor_Receptor(*RADIO);
+    xMutex = xSemaphoreCreateMutex();
+      xTaskCreatePinnedToCore(
+        Radiocore,
+        "radiocore",
+        10000,
+        NULL,
+        1,
+        NULL,
+        0
+    );
 }
 
-
+     // Intervalle de mise à jour de la batterie en millisecondes
 void loop() {
+    static unsigned long lastBatteryUpdate = 0;
+    unsigned long currentMillis = millis();
+    const unsigned long batteryupadateInterval = 100000;
+    static bool last_armed_state = false;
+
   if (controller.isConnected()) {
     XboxControlsState s;
     controller.read(&s);
     Serial.println("controller connected");
 
 // Map controller inputs to drone commands + prepare the packet to send 
-    packet.thr = constrain((-1.0f * s.leftTrigger + s.rightTrigger) / (1.023f * 2) + 1500.0f, 1000.0f, 2000.0f);
-    packet.yaw = constrain((s.rightStickX / 32768.0f) * 30, -30.0f, 30.0f);
-    packet.pitch = constrain((s.rightStickY / 32768.0f) * 30, -30.0f, 30.0f);
-    packet.roll = constrain((s.leftStickX / 32768.0f) * 30, -30.0f, 30.0f);
-    packet.armed = s.xboxButton ? 1.0f : 0.0f;
-    //Serial.printf("roll: %.2f, pitch: %.2f, yaw: %.2f, thr: %.2f, armed: %.2f\n",
-    s.leftStickX, s.leftStickY, s.rightStickX, s.rightStickY, s.leftTrigger, s.rightTrigger);
-    // Send and receive packets using the alternate radio handler
+  if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
+    // stocking orders in shared variable
+    order.thr = constrain((-0.35f * s.leftTrigger + 0.65f * s.rightTrigger) / (1.023f ) + 1300.0f, 1000.0f, 2000.0f);
+    order.yaw = constrain((s.rightStickX / 32768.0f) * 30, -30.0f, 30.0f);
+    order.pitch = constrain((s.rightStickY / 32768.0f) * 30, -30.0f, 30.0f);
+    order.roll = constrain((s.leftStickX / 32768.0f) * 30, -30.0f, 30.0f);
+    if (s.xboxButton && !last_armed_state) { //arming on xbox button press
+      order.armed = true;
+    } else if (!s.xboxButton && last_armed_state) {
+      order.armed = false;
+    }
+    last_armed_state = s.xboxButton;
    
-
-    unsigned long currentMillis = millis();
-    unsigned long batteryupadateInterval = 100000; // Intervalle de mise à jour de la batterie en millisecondes
-    static unsigned long lastBatteryUpdate = 0;
-
-        if (radioAlternate->update(packet, packetDrone)){
-        float roll = packetDrone.ActualRoll;
-        float pitch = packetDrone.ActualPitch;
-        float yaw = packetDrone.ActualYaw;
-        float battery = packetDrone.ActualBattery;
-        Serial.println("GS",roll,pitch,yaw);
-
         if (currentMillis - lastBatteryUpdate >= batteryupadateInterval) {
-            Serial.printf("GS",roll,pitch,yaw,battery);
+            Serial.printf("GS roll: %.2f, pitch: %.2f, yaw: %.2f", tele.ActualRoll, tele.ActualPitch, tele.ActualYaw);
             lastBatteryUpdate = currentMillis;
-        }} else {
+        } else {
             Serial.println("No data received from drone");
         } 
-    
-  } else {
+      } else {
     Serial.println("controller not connected");
   }
 }
+}
 
+void Radiocore(void * Pvparameter) {
+  for(;;) {
+        if (xSemaphoreTake(xMutex, 0)== pdTRUE) {
+         // save received data in shared variable   
+        tele.ActualRoll= packetDrone.ActualRoll;
+        tele.ActualPitch= packetDrone.ActualPitch;
+        tele.ActualYaw= packetDrone.ActualYaw;
+        tele.batteryVoltage= packetDrone.batteryVoltage;
+        xSemaphoreGive(xMutex);
+    }
+    radioAlternate->update(Packet, packetDrone);
+        //  packet to send
+    if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
+        Packet.thr = order.thr;
+        Packet.yaw = order.yaw;
+        Packet.pitch = order.pitch;
+        Packet.roll = order.roll;
+        Packet.armed = order.armed;
+        xSemaphoreGive(xMutex);
+    }
+
+    vTaskDelay(pdMS_TO_TICKS(100)); // little delay to avoid overwhelming the CPU
+  
+}
+}
+
+   

@@ -5,6 +5,7 @@
 #include <SPI.h>
 #include <atomic>
 #include <climits>
+#include <Servo.h>
 
 SemaphoreHandle_t xMutex;
 void Radiocore(void * Pvparameter);
@@ -32,9 +33,18 @@ struct Order {
   std::atomic <bool> armed;
 };
 
+struct telemerie {
+    std::atomic <float> batteryVoltage;
+    std::atomic <float> ActualPitch;
+    std::atomic <float> ActualRoll;
+    std::atomic <float> ActualYaw;
+    };
+
   ControlData Packet; // receive from GS
   DroneData dronepacket; // send to GS
   Order order;
+  telemerie tele;
+
 class IMU {
   private:
     // MPU-6050 
@@ -88,6 +98,7 @@ class IMU {
         erreurGyroX = sommeX / 500;
         erreurGyroY = sommeY / 500;
         erreurGyroZ = sommeZ / 500;
+        delay(10); //
     }  
     //communication
     void wire_begin(int sda, int scl) {
@@ -194,18 +205,23 @@ Emitor_receptor radio;
 class moteur {
   private :
   const int Moteur_pin;
+  const int canal;
   float vitesseMoteur;
+  int PWMvalue;
   int vitesseMin = 1000;
   int vitesseMax = 2000;
   bool estArmer = false;
-
+  
   public:
-  moteur(const int& pin, float vitesse)
-  : Moteur_pin(pin), vitesseMoteur(vitesse) {
+  moteur(const int& pin, const int& canal, float vitesse)
+  : Moteur_pin(pin), canal(canal), vitesseMoteur(vitesse) {
 
   }
   void start() {
-    pinMode(Moteur_pin, OUTPUT);
+     pinMode(Moteur_pin, OUTPUT);
+     ledcSetup(canal, 50, 14); // 50 Hz, 14-bit resolution
+     ledcAttachPin(Moteur_pin, canal);
+     ledcWrite(canal, 0); // Démarre à 0% de duty cycle (moteur éteint)
   }
   void armed() {
     estArmer=true;
@@ -221,6 +237,10 @@ class moteur {
     } else {
       vitesseMoteur = constrain(vitesseRecue, vitesseMin, vitesseMax);
     }
+    // Convertir la vitesse en microsecondes pour le signal PWM
+    PWMvalue = 16384*(vitesseMoteur/20000.0); // 14-bit resolution
+    ledcWrite(canal, PWMvalue);
+
   }
 };
 
@@ -232,7 +252,7 @@ class mixMotor {
   moteur m_dg;
  
   public : 
-   mixMotor() : m_ad(12,1000), m_ag(13,1000), m_dd(14,1000), m_dg(27,1000) {}  
+   mixMotor() : m_ad(12,1,1000), m_ag(13,2,1000), m_dd(14,3,1000), m_dg(27,4,1000) {}  
 
    void start() {
     m_ad.start(); m_ag.start(); m_dd.start(); m_dg.start();
@@ -249,7 +269,6 @@ class mixMotor {
     
     }
 
-    
   void appliquer(float thr, float p, float r,  float y) {
     thr = constrain(thr, 1000,1600);p = constrain(p, 0,100);r = constrain(r, 0,100);y = constrain(y, 0,100);
     m_ag.vitCtrl(constrain(thr + p + r + y, 1000, 2000));
@@ -257,6 +276,7 @@ class mixMotor {
     m_dg.vitCtrl(constrain(thr - p + r - y, 1000, 2000)); 
     m_dd.vitCtrl(constrain(thr - p - r + y, 1000, 2000));
   }
+
 };
 mixMotor monMix;
 
@@ -309,7 +329,7 @@ class failsafe {
 
     bool temporaryLoss() {
       if (millis() - lastSignalTime > timeoutmin)
-        return true;
+      return true;
       return false;
     } 
     bool criticalLoss() {
@@ -321,7 +341,14 @@ class failsafe {
       if (criticalLoss() ) {
         mixer.stopTout();
       } else if (temporaryLoss() ) {
-        mixer.appliquer(1000, 0, 0, 0); // stationnaire
+        if (xSemaphoreTake(xMutex, 0) == pdTRUE){
+          order.thr = 1300.0f; // Cut throttle
+          order.pitch = 0.0f;
+          order.roll = 0.0f;
+          order.yaw = 0.0f;
+          order.armed = false; // Disarm the drone
+          xSemaphoreGive(xMutex);
+        }; // stationnaire
     } else {
         // normal operation, do nothing
       }
@@ -368,6 +395,7 @@ update_data data(500);
 
 #define SDA_PIN 4
 #define SCL_PIN 5
+#define LED_PIN 2
 unsigned long tempsCyclePre = 0;
 const unsigned long PERIOD_CYCLE = 4000; // 250 Hz
 
@@ -375,7 +403,12 @@ const unsigned long PERIOD_CYCLE = 4000; // 250 Hz
 
 void setup() {
   Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
   monIMU.wire_begin(SDA_PIN, SCL_PIN);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, HIGH); // calibration en cours
+  delay(5000);  
+  digitalWrite(LED_PIN, LOW); // pret pour le vol
   monMix.start();
   monMix.arming();
   xMutex = xSemaphoreCreateMutex();
@@ -391,19 +424,16 @@ void setup() {
 }
 
 void loop() {
-
-  static float r_order = 0;
-  static float p_order = 0;
-  static float y_order = 0;
-  static float thr_order = 1000;
-  static bool isArmed = false;
   static unsigned long last_arm;
+  static bool isArmed = false;
+  static float r_order, p_order, y_order, thr_order;
+   unsigned long currentTime = millis();
 
 if (micros() - tempsCyclePre > PERIOD_CYCLE ){
   //mise a jour des mesures
 
 //mise a jour commande
-if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
+if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
     r_order = order.roll;
     p_order = order.pitch;
     y_order = order.yaw;
@@ -429,19 +459,24 @@ if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
     float Yawcorr = PIDyaw.calcErreur(y_order, mesureYaw, dt);
     float Pitchcorr = PIDpitch.calcErreur(p_order, mesurePitch, dt);
 
-    if (isArmed == true) {
+    if (order.armed.load() == true) {
      // apply motor mixing
-     monMix.appliquer(thr_order, Pitchcorr, Rollcorr, Yawcorr );
+     monMix.appliquer(order.thr, Pitchcorr, Rollcorr, Yawcorr );
   } else {
       monMix.stopTout();
   }
-  // update GS
+  // prepare data to send to GS
+  tele.ActualPitch = monIMU.getPitch();
+  tele.ActualRoll = monIMU.getRoll();
+  tele.ActualYaw = monIMU.getYaw();
+  tele.batteryVoltage = 11.1; // Example voltage
+
   tempsCyclePre = micros();
   if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
-  dronepacket.batteryVoltage = 11.1; // Example voltage
-  dronepacket.ActualPitch = monIMU.getPitch();
-  dronepacket.ActualRoll = monIMU.getRoll();
-  dronepacket.ActualYaw = monIMU.getYaw();
+  dronepacket.batteryVoltage = tele.batteryVoltage; // Example voltage
+  dronepacket.ActualPitch = tele.ActualPitch;
+  dronepacket.ActualRoll = tele.ActualRoll;
+  dronepacket.ActualYaw = tele.ActualYaw;
   xSemaphoreGive(xMutex);
     }
   //debug  
@@ -450,13 +485,13 @@ if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(2)) == pdTRUE) {
   //Serial.println(monIMU.getYaw());    
   }
 }
-// note : l'obtention des mesures se fait en 1micros , les calculs et l'action se fait en 4micros
+// note : la boucle d execution se fait en 4ms pour le core 1  en parallel de la reception et envoie des données par radio dans le core 0
 
 void Radiocore(void * Pvparameter) {
    radio.begin();
    for(;;){
     radio.receivePacket(Packet); 
-    if (xSemaphoreTake(xMutex, pdMS_TO_TICKS(5)) == pdTRUE) {            
+    if (xSemaphoreTake(xMutex, 0) == pdTRUE) {            
        data.data(order.thr, order.pitch, order.roll, order.yaw, order.armed);
       xSemaphoreGive(xMutex);
       }

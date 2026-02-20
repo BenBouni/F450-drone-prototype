@@ -4,6 +4,9 @@ import numpy as np
 import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QPushButton
 import pyqtgraph as pg
+from PyQt6.QtOpenGLWidgets import QOpenGLWidget
+from OpenGL.GL import *
+from OpenGL.GLU import *
 
 # Initialize data buffer
 
@@ -100,7 +103,7 @@ class GSMainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("GS Data Monitor")
         self.setGeometry(100, 100, 800, 600)
-
+    
         self.central_widget = QWidget() 
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget) 
@@ -148,6 +151,14 @@ class GSMainWindow(QMainWindow):
 
         self.curve_yaw = self.plot_widget.plot(pen='b')  # yaw
 
+        self.gl_widget = GLWidget()
+        self.gl_widget.setMinimumSize(400, 400) 
+        self.layout.addWidget(self.gl_widget)
+
+        self.gl_widget = GLWidget()#3D visualization widget
+        self.layout.addWidget(self.gl_widget)
+        self.gl_widget.update() # Force l'affichage du drone à (0,0,0)
+        
 #controll buttons
 
         self.start_button = QPushButton("Start")
@@ -169,6 +180,9 @@ class GSMainWindow(QMainWindow):
         self.worker.stop()
 
     def update_telemetry(self, data):
+        roll = data[3]
+        pitch = data[4]
+        yaw = data[5]
         #update labels
         self.label_moyenne.setText(f"Moyenne: {data[0]:.2f}")
         self.label_roll.setText(f"Roll: {data[3]:.2f}")
@@ -179,6 +193,105 @@ class GSMainWindow(QMainWindow):
         self.curve_roll.setData(self.worker.roll_buffer)
         self.curve_pitch.setData(self.worker.pitch_buffer)
         self.curve_yaw.setData(self.worker.yaw_buffer)
+        #update 3D visualization
+        
+        self.gl_widget.setRotation(roll, pitch, yaw) # Assuming you have a method to set rotation based on roll, pitch, yaw
+        self.gl_widget.update() # Trigger a repaint of the OpenGL widget to reflect the new orientation
+
+class GLWidget(QOpenGLWidget):
+    def __init__(self, parent=None):
+        super(GLWidget, self).__init__(parent)
+        # Initialisation des variables d'attitude
+        self.roll = 0.0
+        self.pitch = 0.0
+        self.yaw = 0.0
+
+    def setRotation(self, r, p, y):
+        """ Mise à jour des angles reçus par la télémétrie """
+        self.roll = r
+        self.pitch = p
+        self.yaw = y
+
+    def initializeGL(self):
+        glClearColor(0.0, 0.0, 0.0, 1.0)
+        glEnable(GL_DEPTH_TEST)
+
+    def paintGL(self):
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
+        glLoadIdentity()
+        
+        # Positionnement de la caméra
+        gluLookAt(5, 5, 5, 0, 0, 0, 0, 1, 0)
+        
+        # Application des rotations (Ordre : Yaw -> Pitch -> Roll)
+        glRotatef(self.yaw, 0, 1, 0)   # Axe Y (Vertical)
+        glRotatef(self.pitch, 1, 0, 0) # Axe X (Latéral)
+        glRotatef(self.roll, 0, 0, 1)  # Axe Z (Frontal)
+        
+        self.draw_drone()
+    def resizeGL(self, w, h):
+        glViewport(0, 0, w, h)
+        glMatrixMode(GL_PROJECTION)
+        glLoadIdentity()
+        # Angle de vue de 45°, ratio de la fenêtre, et plans de coupe (zNear, zFar)
+        gluPerspective(45, w / h, 0.1, 100.0)
+        glMatrixMode(GL_MODELVIEW) 
+
+    def draw_box(self, x, y, z):
+        """ Dessine un parallélépipède pour le corps """
+        glBegin(GL_QUADS)
+        # On définit une face simple pour l'exemple
+        glVertex3f(-x/2, y/2, z/2); glVertex3f(x/2, y/2, z/2)
+        glVertex3f(x/2, -y/2, z/2); glVertex3f(-x/2, -y/2, z/2)
+        # (Il faudrait normalement définir les 6 faces pour un cube complet)
+        glEnd()
+
+    def draw_circle(self, x, y, z, radius):
+        """ Dessine un cercle pour simuler les hélices """
+        glBegin(GL_LINE_LOOP)
+        for i in range(20):
+            angle = 2 * np.pi * i / 20
+            glVertex3f(x + np.cos(angle) * radius, y, z + np.sin(angle) * radius)
+        glEnd()
+    def draw_box(self, x, y, z):
+        glBegin(GL_QUADS)
+    # Face supérieure (Top)
+        glVertex3f(-x/2,  y/2, -z/2); glVertex3f( x/2,  y/2, -z/2)
+        glVertex3f( x/2,  y/2,  z/2); glVertex3f(-x/2,  y/2,  z/2)
+    # Face inférieure (Bottom)
+        glVertex3f(-x/2, -y/2, -z/2); glVertex3f( x/2, -y/2, -z/2)
+        glVertex3f( x/2, -y/2,  z/2); glVertex3f(-x/2, -y/2,  z/2)
+    # On pourrait ajouter les faces latérales ici...
+        glEnd()
+
+    def draw_drone(self):
+        # Corps central
+        glColor3f(0.5, 0.5, 0.5)
+        self.draw_box(1.0, 0.2, 1.0)
+        
+        # Ton code pour les bras et hélices...
+    def draw_drone(self):
+    # Corps central
+        glColor3f(0.5, 0.5, 0.5) # Gris
+        self.draw_box(1.0, 0.2, 1.0) 
+    
+    # Bras avant (en rouge pour distinguer l'avant)
+        glColor3f(1.0, 0.0, 0.0) 
+        glBegin(GL_LINES)
+        glVertex3f(0, 0, 0); glVertex3f(1.5, 0, 1.5)  # Bras Avant-Droit
+        glVertex3f(0, 0, 0); glVertex3f(-1.5, 0, 1.5) # Bras Avant-Gauche
+
+    # Bras arrière (en blanc)
+        glColor3f(1.0, 1.0, 1.0)
+        glVertex3f(0, 0, 0); glVertex3f(1.5, 0, -1.5)
+        glVertex3f(0, 0, 0); glVertex3f(-1.5, 0, -1.5)
+        glEnd()
+    # Hélices (en bleu)
+        glColor3f(0.0, 0.0, 1.0)
+        self.draw_circle(1.5, 0, 1.5, 0.5)  # Hélice Avant-Droite
+        self.draw_circle(-1.5, 0, 1.5, 0.5) # Hélice Avant-Gauche
+        self.draw_circle(1.5, 0, -1.5, 0.5) # Hélice Arrière-Droite
+        self.draw_circle(-1.5, 0, -1.5, 0.5) # Hélice Arrière-Gauche
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
