@@ -84,8 +84,8 @@ class IMU {
         
 
         //projection de l'accel : 
-        float angleAccelRoll = atan2(accelY,accelZ) * 180/M_PI;
-        float angleAccelPitch = atan2(-accelX,sqrt(accelY*accelY+accelZ*accelZ)) * 180/M_PI;
+        float angleAccelRoll = atan2(-accelY,accelZ) * 180/M_PI;
+        float angleAccelPitch = atan2(accelX,sqrt(accelY*accelY+accelZ*accelZ)) * 180/M_PI;
 
         //nos angles finals : 
         angleRoll = ALPHA*(gyroX*dt + angleRoll) +(1-ALPHA)*angleAccelRoll;

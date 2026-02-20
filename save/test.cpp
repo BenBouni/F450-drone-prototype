@@ -180,7 +180,12 @@ void loop() {
     last_armed_state = s.xboxButton;
    
         if (currentMillis - lastBatteryUpdate >= batteryupadateInterval) {
-            Serial.printf("GS roll: %.2f, pitch: %.2f, yaw: %.2f", tele.ActualRoll, tele.ActualPitch, tele.ActualYaw);
+            Serial.println("GS,");
+            Serial.print(tele.ActualRoll);
+            Serial.print(",");
+            Serial.print(tele.ActualPitch);
+            Serial.print(",");
+            Serial.println(tele.ActualYaw);
             lastBatteryUpdate = currentMillis;
         } else {
             Serial.println("No data received from drone");

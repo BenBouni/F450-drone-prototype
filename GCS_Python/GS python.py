@@ -102,18 +102,16 @@ class GSMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("GS Data Monitor")
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 600, 800)
     
         self.central_widget = QWidget() 
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget) 
 #Valeur
-        self.label_moyenne = QLabel("Moyenne: N/A")
-        self.label_ecart_type = QLabel("Ecart Type: N/A")
+       
         self.label_valeur = QLabel("Valeur: N/A")
 
-        self.layout.addWidget(self.label_moyenne)
-        self.layout.addWidget(self.label_ecart_type)
+       
         self.layout.addWidget(self.label_valeur)
 
         self.plot_widget = pg.PlotWidget(title="GS Data Plot")
@@ -121,41 +119,34 @@ class GSMainWindow(QMainWindow):
         self.plot_data_curve = self.plot_widget.plot(pen='y')
 
 #Roll
-        self.label_moyenne_roll = QLabel("Moyenne Roll: N/A")
-        self.label_ecart_type_roll = QLabel("Ecart Type Roll: N/A")
+       
         self.label_roll = QLabel("Roll: N/A")
 
-        self.layout.addWidget(self.label_moyenne_roll)
-        self.layout.addWidget(self.label_ecart_type_roll)
         self.layout.addWidget(self.label_roll)
 
         self.curve_roll = self.plot_widget.plot(pen='r')  # roll
 #Pitch
-        self.label_moyenne_pitch = QLabel("Moyenne Pitch: N/A")
-        self.label_ecart_type_pitch = QLabel("Ecart Type Pitch: N/A")
+        
         self.label_pitch = QLabel("Pitch: N/A")
 
-        self.layout.addWidget(self.label_moyenne_pitch)
-        self.layout.addWidget(self.label_ecart_type_pitch)
+        
         self.layout.addWidget(self.label_pitch)
 
         self.curve_pitch = self.plot_widget.plot(pen='g')  # pitch
 #Yaw
-        self.label_moyenne_yaw = QLabel("Moyenne Yaw: N/A")
-        self.label_ecart_type_yaw = QLabel("Ecart Type Yaw: N/A")
+       
         self.label_yaw = QLabel("Yaw: N/A")
         
-        self.layout.addWidget(self.label_moyenne_yaw)
-        self.layout.addWidget(self.label_ecart_type_yaw)
+        
         self.layout.addWidget(self.label_yaw)
 
         self.curve_yaw = self.plot_widget.plot(pen='b')  # yaw
 
         self.gl_widget = GLWidget()
-        self.gl_widget.setMinimumSize(400, 400) 
+        self.gl_widget.setMinimumSize(300, 300) 
         self.layout.addWidget(self.gl_widget)
 
-        self.gl_widget = GLWidget()#3D visualization widget
+        #3D visualization widget
         self.layout.addWidget(self.gl_widget)
         self.gl_widget.update() # Force l'affichage du drone à (0,0,0)
         
@@ -184,7 +175,7 @@ class GSMainWindow(QMainWindow):
         pitch = data[4]
         yaw = data[5]
         #update labels
-        self.label_moyenne.setText(f"Moyenne: {data[0]:.2f}")
+       
         self.label_roll.setText(f"Roll: {data[3]:.2f}")
         self.label_pitch.setText(f"Pitch: {data[4]:.2f}")
         self.label_yaw.setText(f"Yaw: {data[5]:.2f}")
@@ -234,16 +225,20 @@ class GLWidget(QOpenGLWidget):
         glMatrixMode(GL_PROJECTION)
         glLoadIdentity()
         # Angle de vue de 45°, ratio de la fenêtre, et plans de coupe (zNear, zFar)
-        gluPerspective(45, w / h, 0.1, 100.0)
+        gluPerspective(45.0, w / h, 0.1, 100.0)
         glMatrixMode(GL_MODELVIEW) 
 
     def draw_box(self, x, y, z):
         """ Dessine un parallélépipède pour le corps """
         glBegin(GL_QUADS)
         # On définit une face simple pour l'exemple
-        glVertex3f(-x/2, y/2, z/2); glVertex3f(x/2, y/2, z/2)
-        glVertex3f(x/2, -y/2, z/2); glVertex3f(-x/2, -y/2, z/2)
-        # (Il faudrait normalement définir les 6 faces pour un cube complet)
+        glVertex3f(-x/2, y/2, z/2); glVertex3f(x/2, y/2, z/2) # Face avant (Front)
+        glVertex3f(x/2, -y/2, z/2); glVertex3f(-x/2, -y/2, z/2) # Face arrière (Back)
+        glVertex3f(-x/2, y/2, z); glVertex3f(x/2, y/2, z/2) # Face supérieure (Top)
+        glVertex3f(x/2, -y/2, -z/2); glVertex3f(-x/2, -y/2, -z/2) # Face inférieure (Bottom)
+        glVertex3f(-x/2, y/2, -z/2); glVertex3f(-x/2, -y/2, -z/2) # Face gauche (Left)
+        glVertex3f(-x/2, -y/2, z/2); glVertex3f(-x/2, y/2, z/2) # Face droite (Right)
+        
         glEnd()
 
     def draw_circle(self, x, y, z, radius):
@@ -253,27 +248,21 @@ class GLWidget(QOpenGLWidget):
             angle = 2 * np.pi * i / 20
             glVertex3f(x + np.cos(angle) * radius, y, z + np.sin(angle) * radius)
         glEnd()
-    def draw_box(self, x, y, z):
-        glBegin(GL_QUADS)
-    # Face supérieure (Top)
-        glVertex3f(-x/2,  y/2, -z/2); glVertex3f( x/2,  y/2, -z/2)
-        glVertex3f( x/2,  y/2,  z/2); glVertex3f(-x/2,  y/2,  z/2)
-    # Face inférieure (Bottom)
-        glVertex3f(-x/2, -y/2, -z/2); glVertex3f( x/2, -y/2, -z/2)
-        glVertex3f( x/2, -y/2,  z/2); glVertex3f(-x/2, -y/2,  z/2)
-    # On pourrait ajouter les faces latérales ici...
-        glEnd()
-
+   
     def draw_drone(self):
         # Corps central
         glColor3f(0.5, 0.5, 0.5)
-        self.draw_box(1.0, 0.2, 1.0)
+        self.draw_box(0.5, 0.2, 1.5)
+    
         
         # Ton code pour les bras et hélices...
     def draw_drone(self):
+        glVertex3f(5,0,0); glVertex3f(-5,0,0) # Axe X
+        glVertex3f(0,5,0); glVertex3f(0,-5,0) # Axe Y
+        glVertex3f(0,0,5); glVertex3f(0,0,-5) # Axe Z
     # Corps central
         glColor3f(0.5, 0.5, 0.5) # Gris
-        self.draw_box(1.0, 0.2, 1.0) 
+        self.draw_box(1.0, 0.5, 1.0) 
     
     # Bras avant (en rouge pour distinguer l'avant)
         glColor3f(1.0, 0.0, 0.0) 
@@ -283,9 +272,9 @@ class GLWidget(QOpenGLWidget):
 
     # Bras arrière (en blanc)
         glColor3f(1.0, 1.0, 1.0)
-        glVertex3f(0, 0, 0); glVertex3f(1.5, 0, -1.5)
+        glVertex3f(0, -0, 0); glVertex3f(1.5, -0, -1.5)
         glVertex3f(0, 0, 0); glVertex3f(-1.5, 0, -1.5)
-        glEnd()
+        glEnd() # Fin des bras
     # Hélices (en bleu)
         glColor3f(0.0, 0.0, 1.0)
         self.draw_circle(1.5, 0, 1.5, 0.5)  # Hélice Avant-Droite
