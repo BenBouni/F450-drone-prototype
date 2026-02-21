@@ -48,7 +48,7 @@ class SerialWorker5(QThread):
                         if len(self.split_data) >= 5:
                            
                             try:
-                                roll, pitch, yaw = float(self.split_data[1]), float(self.split_data[2]), float(self.split_data[3])
+                                pitch, roll, yaw = float(self.split_data[1]), float(self.split_data[2]), float(self.split_data[3])
                                 data = self.split_data[4]  # GS data is in the 5th
                                 valeur = float(data)
                                 #update buffers            
@@ -171,13 +171,13 @@ class GSMainWindow(QMainWindow):
         self.worker.stop()
 
     def update_telemetry(self, data):
-        roll = data[3]
-        pitch = data[4]
+        pitch = data[3]
+        roll = data[4]
         yaw = data[5]
         #update labels
        
-        self.label_roll.setText(f"Roll: {data[3]:.2f}")
-        self.label_pitch.setText(f"Pitch: {data[4]:.2f}")
+        self.label_pitch.setText(f"Pitch: {data[3]:.2f}")
+        self.label_roll.setText(f"Roll: {data[4]:.2f}")
         self.label_yaw.setText(f"Yaw: {data[5]:.2f}")
         #update plots
         self.plot_data_curve.setData(self.worker.data_buffer)
@@ -212,7 +212,7 @@ class GLWidget(QOpenGLWidget):
         glLoadIdentity()
         
         # Positionnement de la caméra
-        gluLookAt(5, 5, 5, 0, 0, 0, 0, 1, 0)
+        gluLookAt(5, 5, 0, 0, 0, 0, 0, 1, 0)
         
         # Application des rotations (Ordre : Yaw -> Pitch -> Roll)
         glRotatef(self.yaw, 0, 1, 0)   # Axe Y (Vertical)
@@ -232,12 +232,14 @@ class GLWidget(QOpenGLWidget):
         """ Dessine un parallélépipède pour le corps """
         glBegin(GL_QUADS)
         # On définit une face simple pour l'exemple
-        glVertex3f(-x/2, y/2, z/2); glVertex3f(x/2, y/2, z/2) # Face avant (Front)
-        glVertex3f(x/2, -y/2, z/2); glVertex3f(-x/2, -y/2, z/2) # Face arrière (Back)
-        glVertex3f(-x/2, y/2, z); glVertex3f(x/2, y/2, z/2) # Face supérieure (Top)
-        glVertex3f(x/2, -y/2, -z/2); glVertex3f(-x/2, -y/2, -z/2) # Face inférieure (Bottom)
-        glVertex3f(-x/2, y/2, -z/2); glVertex3f(-x/2, -y/2, -z/2) # Face gauche (Left)
-        glVertex3f(-x/2, -y/2, z/2); glVertex3f(-x/2, y/2, z/2) # Face droite (Right)
+        glVertex3f(x/2, y/2, -z/2) ; glVertex3f(x/2, -y/2, -z/2) ; glVertex3f(-x/2, -y/2, -z/2) ;  glVertex3f(-x/2, y/2, -z/2)# Face arrière
+        glVertex3f(x/2, y/2, z/2) ; glVertex3f(x/2, -y/2, z/2) ; glVertex3f(-x/2, -y/2, z/2) ; glVertex3f(-x/2, y/2, z/2) # Face avant
+        glVertex3f(x/2, y/2, -z/2) ; glVertex3f(x/2, y/2, z/2) ; glVertex3f(-x/2, y/2, z/2) ; glVertex3f(-x/2, y/2, -z/2) # Face supérieure
+        glVertex3f(x/2, -y/2, -z/2) ; glVertex3f(x/2, -y/2, z/2) ; glVertex3f(-x/2, -y/2, z/2) ; glVertex3f(-x/2, -y/2, -z/2) # Face inférieure
+        glVertex3f(x/2, y/2, -z/2) ; glVertex3f(x/2, -y/2, -z/2) ; glVertex3f(x/2, -y/2, z/2) ; glVertex3f(x/2, y/2, z/2) # Face droite
+        glVertex3f(-x/2, y/2, -z/2) ; glVertex3f(-x/2, -y/2, -z/2) ; glVertex3f(-x/2, -y/2, z/2) ; glVertex3f(-x/2, y/2, z/2) # Face gauche 
+
+        #qui pointent vers le haut ? y ou z ? 
         
         glEnd()
 
@@ -257,12 +259,15 @@ class GLWidget(QOpenGLWidget):
         
         # Ton code pour les bras et hélices...
     def draw_drone(self):
+        glBegin(GL_LINES)
+        glColor3f(1.0, 1.0, 0.0) #  pour les axes
         glVertex3f(5,0,0); glVertex3f(-5,0,0) # Axe X
         glVertex3f(0,5,0); glVertex3f(0,-5,0) # Axe Y
         glVertex3f(0,0,5); glVertex3f(0,0,-5) # Axe Z
+        glEnd()
     # Corps central
         glColor3f(0.5, 0.5, 0.5) # Gris
-        self.draw_box(1.0, 0.5, 1.0) 
+        self.draw_box(1.0, 1, 1.0) 
     
     # Bras avant (en rouge pour distinguer l'avant)
         glColor3f(1.0, 0.0, 0.0) 
