@@ -212,12 +212,12 @@ class GLWidget(QOpenGLWidget):
         glLoadIdentity()
         
         # Positionnement de la caméra
-        gluLookAt(5, 5, 0, 0, 0, 0, 0, 1, 0)
+        gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0)
         
         # Application des rotations (Ordre : Yaw -> Pitch -> Roll)
-        glRotatef(self.yaw, 0, 1, 0)   # Axe Y (Vertical)
-        glRotatef(self.pitch, 1, 0, 0) # Axe X (Latéral)
-        glRotatef(self.roll, 0, 0, 1)  # Axe Z (Frontal)
+        glRotatef(self.yaw, 0, 1, 0)    # lacet autour de Y
+        glRotatef(self.pitch, 0, 0, 1)  # tangage autour de Z
+        glRotatef(self.roll, 1, 0, 0)   # roulis autour de X
         
         self.draw_drone()
     def resizeGL(self, w, h):
