@@ -50,116 +50,200 @@ class IMU {
     // MPU-6050 
     float accelX, accelY, accelZ;
     float gyroX, gyroY, gyroZ; 
+    // coordonnées quaternions pour le filtre de madgwick
+    float q0 = 1.0, q1 = 0.0, q2 = 0.0, q3 = 0.0;
+    float offsetAccelX = 0, offsetAccelY = 0, offsetAccelZ = 0; // pour la calibration de l'accéléromètre
     //pour les calibrations imu :
     float erreurGyroX = 0, erreurGyroY = 0, erreurGyroZ = 0;
     // facteurs de conversions :
     const float GyroFC = 131.0;
-    const float AccelFC = 16384.0;
+    float AccelFC = 16384.0;
+    const float AccMagFC = 600.0; // facteur de conversion pour la boussole, à ajuster selon les mesures
+     float BETA = 0.1; // Coefficient pour le filtre complémentaire
+    // boussole :
+    
+
     // Angles filtrés (ce que le PID utilisera)
     float angleRoll = 0.0;
     float anglePitch = 0.0;
-    float angleYaw = 0.0; // Le Yaw est uniquement géré par le Gyro
+    float angleYaw = 0.0;
+    unsigned long tempsPrecedent;
 
-    // Gestion du temps pour le filtre (Calcul de Delta t)
-    unsigned long tempsPrecedent = 0;
-    const float ALPHA = 0.98; // Coefficient de pondération du filtre complémentaire
-  void lireDonneesBrutes() {
-        // Demande au MPU de commencer à nous envoyer les 6 valeurs brutes
+    void lireDonneesBrutes() {
         Wire.beginTransmission(0x68);
-        Wire.write(0x3B); // Le premier registre où se trouve AccelX
-        Wire.endTransmission(false); // Garde la connexion ouverte
+        Wire.write(0x3B); // Adresse du registre de début des données
+        Wire.endTransmission(false);
+        Wire.requestFrom(0x68, 14, true); // Demander 14 octets
 
-        // Demande 14 octets de donnees brutes (Accel X,Y,Z, Temp, Gyro X,Y,Z)
-        Wire.requestFrom(0x68, 14); // disambiguate overload
-
-        // Note : MPU-6050 stocke les données en 'High Byte' puis 'Low Byte'
-        accelX = (int16_t)(Wire.read() << 8 | Wire.read()); 
+        accelX = (int16_t)(Wire.read() << 8 | Wire.read());
         accelY = (int16_t)(Wire.read() << 8 | Wire.read());
         accelZ = (int16_t)(Wire.read() << 8 | Wire.read());
-        
-        // pour ignorer Lecture de la température 
-        int16_t temp = (Wire.read() << 8) | Wire.read();
-        
+        Wire.read(); Wire.read(); // Ignorer Temp
         gyroX = (int16_t)(Wire.read() << 8 | Wire.read()); 
         gyroY = (int16_t)(Wire.read() << 8 | Wire.read());
         gyroZ = (int16_t)(Wire.read() << 8 | Wire.read());
+
+       
+      
     }
   public :
   
   //calibration de l'imu
   void calibrerIMU() {
-        float sommeX = 0, sommeY = 0, sommeZ = 0;
-        for(int i = 0; i < 500; i++) {
-            lireDonneesBrutes();
-            sommeX += gyroX;
-            sommeY += gyroY;
-            sommeZ += gyroZ;
-        }
-        erreurGyroX = sommeX / 500;
-        erreurGyroY = sommeY / 500;
-        erreurGyroZ = sommeZ / 500;
-        delay(10); //
-    }  
+    float sommeGx=0, sommeGy=0, sommeGz=0;
+    float sommeAx=0, sommeAy=0, sommeAz=0;
+    const int nbEchantillons = 500;
+
+    for(int i = 0; i < nbEchantillons; i++) {
+        lireDonneesBrutes();
+        sommeGx += gyroX;
+        sommeGy += gyroY;
+        sommeGz += gyroZ;
+        sommeAx += accelX;
+        sommeAy += accelY;
+        sommeAz += accelZ;
+        delay(2);  // Petit délai pour espacer les mesures
+    }
+
+    // Biais gyro
+    erreurGyroX = sommeGx / nbEchantillons;
+    erreurGyroY = sommeGy / nbEchantillons;
+    erreurGyroZ = sommeGz / nbEchantillons;
+
+    // Calcul des moyennes accéléro
+    float accelX_moyen = sommeAx / nbEchantillons;
+    float accelY_moyen = sommeAy / nbEchantillons;
+    float accelZ_moyen = sommeAz / nbEchantillons;
+
+    // Ajustement du facteur d'échelle (gain)
+    float accelMagnitude = sqrt(accelX_moyen * accelX_moyen + accelY_moyen * accelY_moyen + accelZ_moyen * accelZ_moyen);
+    AccelFC = accelMagnitude / 16384.0f;
+
+    // Offsets accéléro (on suppose qu'à l'arrêt, la mesure devrait être (0,0,1g) après conversion)
+    // On les stocke en LSB pour les soustraire avant conversion
+    offsetAccelX = accelX_moyen;
+    offsetAccelY = accelY_moyen;
+    offsetAccelZ = accelZ_moyen - AccelFC * 16384.0f; // On retire 1g en LSB
+}
     //communication
     void wire_begin(int sda, int scl) {
       Wire.begin(sda, scl);
-      Wire.setClock(400000);
       Wire.beginTransmission(0x68); //commmencer
-      Wire.write(0x6B); //reveil
-      Wire.write(0x00); //lecture
-      
-      Wire.endTransmission(true); // fin
-      calibrerIMU();
-      tempsPrecedent = micros();   
-  }
-  
-
-  IMU() { 
-      angleRoll = 0.0;
-      anglePitch = 0.0;
-      tempsPrecedent = micros();
+        Wire.write(0x6B); //lecture registre power management
+        Wire.write(0x00);    //mettre à 0 pour sortir du mode veille
+        Wire.endTransmission(true); // fin
+        calibrerIMU();
+        tempsPrecedent = millis();
     }
-    
+
+    void Beta_Modif() { // to modify the BETA parameter of the madgwick filter in real time from the terminal (tuning)
+    if (Serial.available() > 0) {
+        float newBeta = Serial.parseFloat(); 
+        if (newBeta > 0) {
+            BETA = newBeta;
+            Serial.print("Nouveau BETA : ");
+            Serial.println(BETA, 4);
+        }
+    }
+}
+
+   void madgwickUpdate(float gx, float gy, float gz, float ax, float ay, float az, float DT) {
+    float recipNorm;
+    float qDot0, qDot1, qDot2, qDot3;
+    float s0, s1, s2, s3;
+
+    // Taux de rotation (rad/s) -> dérivée des quaternions
+    qDot0 = 0.5f * (-q1 * gx - q2 * gy - q3 * gz);
+    qDot1 = 0.5f * ( q0 * gx + q2 * gz - q3 * gy);
+    qDot2 = 0.5f * ( q0 * gy - q1 * gz + q3 * gx);
+    qDot3 = 0.5f * ( q0 * gz + q1 * gy - q2 * gx);
+
+    // Normaliser les mesures d'accélération
+    if (ax == 0.0f && ay == 0.0f && az == 0.0f) return; // éviter les divisions par zéro
+    recipNorm = 1.0f / sqrt(ax * ax + ay * ay + az * az);
+    if (recipNorm > 0.8f && recipNorm < 1.2f) { // éviter les mesures aberrantes
+    ax *= recipNorm;
+    ay *= recipNorm;
+    az *= recipNorm;
+    } else {
+        return; // Ignorer les mesures d'accélération non valides
+    }
+
+    // Calcul de l'erreur entre la direction estimée de la gravité et la mesure
+    float fx = 2.0f * (q1 * q3 - q0 * q2) - ax;
+    float fy = 2.0f * (q0 * q1 + q2 * q3) - ay;
+    float fz = 2.0f * (0.5f - q1 * q1 - q2 * q2) - az;
+
+    // Calcul du gradient (J_g^T * f) selon l'algorithme de Madgwick
+    s0 = -2.0f * q2 * fx + 2.0f * q1 * fy;                 // -2*q2*fx + 2*q1*fy
+    s1 =  2.0f * q3 * fx + 2.0f * q0 * fy - 4.0f * q1 * fz; // 2*q3*fx + 2*q0*fy - 4*q1*fz
+    s2 = -2.0f * q0 * fx + 2.0f * q3 * fy - 4.0f * q2 * fz; // -2*q0*fx + 2*q3*fy - 4*q2*fz
+    s3 =  2.0f * q1 * fx + 2.0f * q2 * fy;                 // 2*q1*fx + 2*q2*fy
+
+    // Normalisation du gradient
+    recipNorm = 1.0f / sqrt(s0 * s0 + s1 * s1 + s2 * s2 + s3 * s3);
+    s0 *= recipNorm;
+    s1 *= recipNorm;
+    s2 *= recipNorm;
+    s3 *= recipNorm;
+
+    // Appliquer la correction (étape de descente de gradient)
+    qDot0 -= BETA * s0;
+    qDot1 -= BETA * s1;
+    qDot2 -= BETA * s2;
+    qDot3 -= BETA * s3;
+
+    // Intégration
+    q0 += qDot0 * DT;
+    q1 += qDot1 * DT;
+    q2 += qDot2 * DT;
+    q3 += qDot3 * DT;
+
+    // Normalisation des quaternions
+    recipNorm = 1.0f / sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+    q0 *= recipNorm;
+    q1 *= recipNorm;
+    q2 *= recipNorm;
+    q3 *= recipNorm;
+
+    // Calcul des angles d'Euler
+    angleRoll  = atan2f(2.0f * (q0 * q1 + q2 * q3), 1.0f - 2.0f * (q1 * q1 + q2 * q2)) * 180.0f / M_PI;
+    anglePitch = asinf(2.0f * constrain(q0 * q2 - q1 * q3, -1.0f, 1.0f)) * 180.0f / M_PI;
+    angleYaw   = atan2f(2.0f * (q0 * q3 + q1 * q2), 1.0f - 2.0f * (q2 * q2 + q3 * q3)) * 180.0f / M_PI;
+}
     float MettreAjourmesures() {
         lireDonneesBrutes();
         //données calibrées
         gyroX -= erreurGyroX;
         gyroY -= erreurGyroY;
         gyroZ -= erreurGyroZ;
-        
-        gyroX = gyroX/GyroFC;
-        gyroY = gyroY/GyroFC;
-        gyroZ = gyroZ/GyroFC;
+        // Conversion en unités physiques
+        gyroX = (gyroX/GyroFC)*M_PI/180.0f; // Convertir en radians/s
+        gyroY = (gyroY/GyroFC)*M_PI/180.0f;
+        gyroZ = (gyroZ/GyroFC)*M_PI/180.0f;
 
         accelX = accelX/AccelFC;
         accelY = accelY/AccelFC;
         accelZ = accelZ/AccelFC;
 
+        accelX -= offsetAccelX;
+        accelY -= offsetAccelY;
+        accelZ -= offsetAccelZ;
+
         unsigned long tempsActuel = micros();
         float diffTemps = tempsActuel - tempsPrecedent;
-        if (tempsActuel < tempsPrecedent) {
-           diffTemps = (ULONG_MAX - tempsPrecedent) + tempsActuel;
-        }
         tempsPrecedent = tempsActuel;
         float dt = diffTemps/1000000.0;
-          if (isnan(dt) || isinf(dt) || dt > 0.1f) {
-              dt = 0.004f; // Valeur sécuritaire
-          }
-        //projection de l'accel : 
-        float angleAccelRoll = atan2(accelY,accelZ) * 180/M_PI;
-        float angleAccelPitch = atan2(-accelX,sqrt(accelY*accelY+accelZ*accelZ)) * 180/M_PI;
-
-        //nos angles finals : 
-        angleRoll = ALPHA*(gyroX*dt + angleRoll) +(1-ALPHA)*angleAccelRoll;
-        anglePitch = ALPHA*(gyroY*dt + anglePitch) +(1-ALPHA)*angleAccelPitch;
-        angleYaw += (gyroZ*dt ); // accel Z n'a pas de projection 
-        return dt;
-      } 
-  float getRoll() { return angleRoll; }
-  float getPitch() { return anglePitch; }
-  float getYaw() { return angleYaw; }
-          
+        dt = max(0.0001f, dt); // éviter les divisions par zéro dans le filtre de Madgwick
+        madgwickUpdate(gyroX, gyroY, gyroZ, accelX, accelY, accelZ, dt);
+ // Retourner les données brutes calibrées pour le filtre de Madgwick
+       return dt;
+      }   
+    float getAngleRoll() { return angleRoll; }
+    float getAnglePitch() { return anglePitch; }  
+    float getAngleYaw() { return angleYaw; }
 };
+
 IMU monIMU;
 
 class Emitor_receptor { // Récepteur RF24
@@ -451,9 +535,9 @@ if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
     monFailsafe.failsafeAction(monMix);
   }  
   dt = monIMU.MettreAjourmesures(); 
-  float mesureRoll = monIMU.getRoll();
-  float mesurePitch = monIMU.getPitch();
-  float mesureYaw = monIMU.getYaw();
+  float mesureRoll = monIMU.getAngleRoll();
+  float mesurePitch = monIMU.getAnglePitch();
+  float mesureYaw = monIMU.getAngleYaw();
       // calculate correction
     float Rollcorr = PIDroll.calcErreur(r_order, mesureRoll, dt );
     float Yawcorr = PIDyaw.calcErreur(y_order, mesureYaw, dt);
@@ -466,9 +550,9 @@ if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
       monMix.stopTout();
   }
   // prepare data to send to GS
-  tele.ActualPitch = monIMU.getPitch();
-  tele.ActualRoll = monIMU.getRoll();
-  tele.ActualYaw = monIMU.getYaw();
+  tele.ActualPitch = monIMU.getAnglePitch();
+  tele.ActualRoll = monIMU.getAngleRoll();
+  tele.ActualYaw = monIMU.getAngleYaw();
   tele.batteryVoltage = 11.1; // Example voltage
 
   tempsCyclePre = micros();
@@ -485,7 +569,7 @@ if (xSemaphoreTake(xMutex, 0) == pdTRUE) {
   //Serial.println(monIMU.getYaw());    
   }
 }
-// note : la boucle d execution se fait en 4ms pour le core 1  en parallel de la reception et envoie des données par radio dans le core 0
+
 
 void Radiocore(void * Pvparameter) {
    radio.begin();
@@ -500,3 +584,15 @@ void Radiocore(void * Pvparameter) {
    }
 }
 
+ 
+//    TODO LIST :
+// all the code is executed in a loop with a period of 4ms on core 1 in parallel with the reception and sending of data by radio on core 0
+// still need to tune the PID and the BETA parameter of the madgwick filter, and to test the failsafe in case of loss of signal from the GS, and to test the whole system in flight.
+// might separate the tasks of everything and pu each task on a different loop with different frequencies (for example the PID loop at 4ms, the radio communication at 125Hz, and captors detection at 125Hz) to optimize the performance of the system.
+// needto study and add mahnetometer to stabilize the yaw 
+// still need more documentation and comments in the code to explain the different parts of the code and the logic behind it, and to make it more readable and maintainable. 
+
+
+//    FEATURES TO ADD LATER:
+// will also add some safety features like a kill switch, and a buzzer to alert the user in case of critical failure or low battery.
+// will also add some features like a GPS module for position hold and return to home, and a barometer for altitude hold.

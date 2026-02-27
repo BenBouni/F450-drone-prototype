@@ -139,10 +139,10 @@ void setup(void) {
   Serial.begin(115200);
   controller.begin();
   RADIO = new RadioEmitor_Receptor(100, 0xE8E8F0F0E1LL, 0xE8E8F0F0E2LL);
-  RADIO->begin();
+  RADIO->begin(); //radio initialization
   radioAlternate = new RadioAlternateEmitor_Receptor(*RADIO);
-    xMutex = xSemaphoreCreateMutex();
-      xTaskCreatePinnedToCore(
+    xMutex = xSemaphoreCreateMutex(); // create mutex for shared data access
+      xTaskCreatePinnedToCore( // create a task for radio communication on core 0
         Radiocore,
         "radiocore",
         10000,
@@ -153,11 +153,11 @@ void setup(void) {
     );
 }
 
-     // Intervalle de mise à jour de la batterie en millisecondes
+     
 void loop() {
-    static unsigned long lastBatteryUpdate = 0;
+    static unsigned long lastUpdate = 0;
     unsigned long currentMillis = millis();
-    const unsigned long batteryupadateInterval = 100000;
+    const unsigned long upadateInterval = 100; // update interval in milliseconds
     static bool last_armed_state = false;
 
   if (controller.isConnected()) {
@@ -179,14 +179,14 @@ void loop() {
     }
     last_armed_state = s.xboxButton;
    
-        if (currentMillis - lastBatteryUpdate >= batteryupadateInterval) {
+        if (currentMillis - lastUpdate >= upadateInterval) {
             Serial.println("GS,");
             Serial.print(tele.ActualRoll);
             Serial.print(",");
             Serial.print(tele.ActualPitch);
             Serial.print(",");
-            Serial.println(tele.ActualYaw);
-            lastBatteryUpdate = currentMillis;
+            Serial.println(tele.ActualYaw); // print telemetry data to serial every 100 seconds
+            lastUpdate = currentMillis;
         } else {
             Serial.println("No data received from drone");
         } 
@@ -222,4 +222,8 @@ void Radiocore(void * Pvparameter) {
 }
 }
 
-   
+   // the code runs every 4ms on core 1 in parallel with the reception and sending of data by radio on core 0,
+   // still need to test the whole system in flight, and to test the failsafe in case of loss of signal from the GS.
+   // still need to adjust the deadzone of the sticks, and to test the arming and disarming of the drone with the xbox button
+   // tune the PID and the BETA parameter of the madgwick filter. 
+   // might separate the tasks of everything and pu each task on a different loop with different frequencies (for example the PID loop at 4ms, the radio communication at 100ms, and the telemetry printing at 500ms) to optimize the performance of the system.

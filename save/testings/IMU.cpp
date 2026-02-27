@@ -94,6 +94,7 @@ class IMU {
         calibrerIMU();
         tempsPrecedent = millis();
     }
+
     void Beta_Modif() {
     if (Serial.available() > 0) {
         float newBeta = Serial.parseFloat(); 
@@ -117,10 +118,15 @@ class IMU {
     qDot3 = 0.5f * ( q0 * gz + q1 * gy - q2 * gx);
 
     // Normaliser les mesures d'accélération
+    if (ax == 0.0f && ay == 0.0f && az == 0.0f) return; // éviter les divisions par zéro
     recipNorm = 1.0f / sqrt(ax * ax + ay * ay + az * az);
+    if (recipNorm > 0.8f && recipNorm < 1.2f) { // éviter les mesures aberrantes
     ax *= recipNorm;
     ay *= recipNorm;
     az *= recipNorm;
+    } else {
+        return; // Ignorer les mesures d'accélération non valides
+    }
 
     // Calcul de l'erreur entre la direction estimée de la gravité et la mesure
     float fx = 2.0f * (q1 * q3 - q0 * q2) - ax;
