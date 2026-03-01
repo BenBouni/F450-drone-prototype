@@ -1,9 +1,12 @@
 #ifndef CONFIG_H
 #define CONFIG_H
+
 #include "Pins.h"
-#include "IMU.h"
-#include "Radio.h"
-#include "motorLOGIC.h"
+#include <Arduino.h>  // provides TickType_t and commonly used types
+
+// bring in definitions used by the extern declarations
+#include "motorLOGIC.h"   // defines PID, mixMotor
+#include "Radio.h"        // defines Emitor_receptor, update_data, failsafe
 
 // here you can adjust the configurations for the drone :
 
@@ -12,17 +15,17 @@ extern PID PIDroll;
 extern PID PIDpitch;
 extern PID PIDyaw;
 
-//radio pins :
+// radio and data objects used by the tasks
 extern Emitor_receptor radio;
-//data check rate :
-extern update_data data; // in ms, to be adjusted according to the needs of the
+extern update_data data; // in ms, to be adjusted according to system requirements
 
-//failsafe delays :
-extern failsafe monFailsafe; // temporary delay / critical delay in ms, to be adjusted according to the expected signal loss duration and the desired failsafe behavior of the drone
+// failsafe delays :
+extern failsafe monFailsafe; // temporary/critical delays in ms for signal loss handling
 
-//tasks frequencies :
-extern const TickType_t frequency_controll; // 4 ms for the control loop,  because it is a good compromise between the performance of the PID loop and the performance of the ESP32
-extern const TickType_t frequency_captor;    // 2 ms for the captor task, because it is enough for the PID/controll loop
-extern const TickType_t frequency_radio;  // 100 Hz for the radio task , because it is enough for the radio communication and to avoid overloading the CPU with too many tasks running at high frequency
+// tasks frequencies :
+extern const TickType_t frequency_controll; // 4 ms for the control loop
+extern const TickType_t frequency_captor;    // 2 ms for the captor task
+extern const TickType_t frequency_radio;  // 100 Hz for the radio task
+extern const TickType_t frequency_failsafe; // 1000 Hz for the failsafe task
 
 #endif 

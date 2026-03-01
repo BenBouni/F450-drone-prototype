@@ -8,7 +8,8 @@
 class Emitor_receptor { 
   private:
     RF24 radio;
-    const byte address[6] = "00001";
+    // five‑byte pipe address; RF24 expects a uint8_t pointer so use uint8_t explicitly
+    const uint8_t address[6] = {'0','0','0','0','1','\0'};
     const unsigned long interval = 100; // sending interval in ms
     unsigned long dernierEnvoi;
     
@@ -29,7 +30,7 @@ class failsafe {
     const unsigned long timeoutmax ; // in milliseconds
    
   public:
-    failsafe(unsigned long timeoutmin, unsigned long timeoutmaxs);
+    failsafe(unsigned long timeoutmin, unsigned long timeoutmax);
     void updateSignalTime();
     bool temporaryLoss();
     bool criticalLoss();

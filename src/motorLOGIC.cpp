@@ -1,4 +1,5 @@
 #include "motorLOGIC.h"
+#include "Pins.h"
 
 // moteur class implementation
   moteur::moteur(const int& pin, const int& canal, float vitesse)
@@ -32,7 +33,7 @@
 
 
 // mixMotor class implementation
-   mixMotor::mixMotor() : m_ad(AV_D,12,1000), m_ag(AV_G,13,1000), m_dd(AR_D,14,1000), m_dg(AR_G,27,1000) {}  
+   mixMotor::mixMotor() : m_ad(AV_D,12,1000), m_ag(AV_G,13,1000), m_dd(AR_D,14,1000), m_dg(AR_G,27,1000) {}
 
    void mixMotor::start() {
     m_ad.start(); m_ag.start(); m_dd.start(); m_dg.start();
