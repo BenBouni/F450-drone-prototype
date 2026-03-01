@@ -1,7 +1,9 @@
+#ifndef IMU_H
+#define IMU_H
 #include <Arduino.h>
-#include <Wire.h>
 #include <math.h>
-#include "SPI.h"
+#include <Wire.h>
+    
 
 
 class IMU {
@@ -20,12 +22,13 @@ class IMU {
     const float AccMagFC = 600.0; // facteur de conversion pour la boussole, à ajuster selon les mesures
      float BETA = 0.1; // Coefficient pour le filtre complémentaire
     // boussole :
-    
 
+    
     // Angles filtrés (ce que le PID utilisera)
     float angleRoll = 0.0;
     float anglePitch = 0.0;
     float angleYaw = 0.0;
+
     unsigned long tempsPrecedent;
 
     void lireDonneesBrutes() {
@@ -203,38 +206,7 @@ class IMU {
     float getAngleYaw() { return angleYaw; }
 };
 
-IMU monIMU;
-void setup(void) {
-  Serial.begin(115200);
-    monIMU.wire_begin(21, 22); //SDA, SCL pins
-  Serial.println("IMU Calibrating.");
-  delay (2000);
-  Serial.println("IMU Calibrated.");
-  Serial.println("Enter new BETA value (float > 0) to update the filter coefficient:");
-  monIMU.Beta_Modif();
-  delay(5000); 
-}
 
-void loop() {
-  float dt = monIMU.MettreAjourmesures();
-  static unsigned long lastSend = 0;
-    // 2. Envoi des données vers le PC bridé à 20 Hz (toutes les 50ms)
-    unsigned long tempsActuel = millis();
-    if (tempsActuel - lastSend >= 50) {
-        float angleRoll = monIMU.getAngleRoll();
-        float anglePitch = monIMU.getAnglePitch();
-          float angleYaw = monIMU.getAngleYaw();
+extern IMU monIMU;
 
-        Serial.print("GS,");
-        Serial.print(anglePitch);
-        Serial.print(",");
-        Serial.print(angleRoll);
-        Serial.print(",");
-        Serial.print(angleYaw);
-        Serial.print(",");
-        Serial.println(dt, 4); 
-        
-        lastSend = tempsActuel;
-    }
-
-}
+#endif // IMU_H
