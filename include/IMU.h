@@ -7,7 +7,8 @@ class IMU {
   private:
     // MPU-6050 
     float accelX, accelY, accelZ;
-    float gyroX, gyroY, gyroZ; 
+    float gyroX, gyroY, gyroZ;
+    float magX, magY, magZ; 
     // coordonnées quaternions pour le filtre de madgwick
     float q0 = 1.0, q1 = 0.0, q2 = 0.0, q3 = 0.0;
     float offsetAccelX = 0, offsetAccelY = 0, offsetAccelZ = 0; // pour la calibration de l'accéléromètre
@@ -42,8 +43,11 @@ class IMU {
         gyroY = (int16_t)(Wire.read() << 8 | Wire.read());
         gyroZ = (int16_t)(Wire.read() << 8 | Wire.read());
 
-       
+        magX = (int16_t)(Wire.read() << 8 | Wire.read());
+        magY = (int16_t)(Wire.read() << 8 | Wire.read());
+        magZ = (int16_t)(Wire.read() << 8 | Wire.read());
       
+
     }
   public :
   

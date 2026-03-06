@@ -212,7 +212,7 @@ class GLWidget(QOpenGLWidget):
         glLoadIdentity()
         
         # Positionnement de la caméra
-        gluLookAt(0, 0, 5, 0, 0, 0, 0, 1, 0)
+        gluLookAt(5, 5, 5, 0, 0, 0, 0, 1, 0)
         
         # Application des rotations (Ordre : Yaw -> Pitch -> Roll)
         glRotatef(self.yaw, 0, 1, 0)    # lacet autour de Y

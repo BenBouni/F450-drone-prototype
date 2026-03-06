@@ -5,20 +5,47 @@
 #include "motorLOGIC.h"
 
 
-class Emitor_receptor { 
+class Emitor_receptor {
+  public:
+    // role can be changed at runtime if necessary
+    enum Role { TRANSMITTER, RECEIVER };
+
   private:
     RF24 radio;
-    // five‑byte pipe address; RF24 expects a uint8_t pointer so use uint8_t explicitly
-    const uint8_t address[6] = {'0','0','0','0','1','\0'};
+    uint8_t txAddress[6];               // pipe used when transmitting
+    uint8_t rxAddress[6];               // pipe used when listening
+    Role role;                          // current operating mode
     const unsigned long interval = 100; // sending interval in ms
     unsigned long dernierEnvoi;
-    
+
+    void configurePipes();              // helper used when role changes
+
   public:
-    Emitor_receptor(uint8_t cePin, uint8_t csnPin);
+    /**
+     * @param cePin, csnPin    SPI pins for the nRF24L01
+     * @param txAddr           address to use when sending
+     * @param rxAddr           address to use when receiving
+     * @param initialRole      start up as transmitter or receiver
+     */
+    Emitor_receptor(uint8_t cePin,
+                    uint8_t csnPin,
+                    const uint8_t txAddr[6],
+                    const uint8_t rxAddr[6],
+                    Role initialRole = RECEIVER);
+
     void begin();
-    bool receivePacket(ControlData& Packet);
-    bool sendPacket(const DroneData& packetDrone);
-    void sendDroneData(const DroneData& packetDrone);
+
+    /**
+     * Switch the module to the other role on the fly.
+     * Calling this will re‑configure the pipes and start/stop listening
+     * as appropriate. Useful if you want the same board to act as an
+     * RC transmitter one moment and then listen for telemetry later.
+     */
+    void switchRole(Role newRole);
+
+    bool receivePacket(ControlData& Packet);   // valid only when in RECEIVER mode
+    bool sendPacket(const DroneData& packetDrone); // valid only in TRANSMITTER mode
+    void sendDroneData(const DroneData& packetDrone); // helper for periodic sends
 };
 
 extern Emitor_receptor radio;

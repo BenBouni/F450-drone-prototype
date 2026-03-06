@@ -110,7 +110,7 @@ void IMU::madgwickUpdate(float gx, float gy, float gz, float ax, float ay, float
     q3 += qDot3 * DT;
 
     // Normalisation des quaternions
-    recipNorm = 1.0f / sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
+    recipNorm = 1.0f / sqrtf(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3);
     q0 *= recipNorm;
     q1 *= recipNorm;
     q2 *= recipNorm;
