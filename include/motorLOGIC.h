@@ -49,5 +49,4 @@ class mixMotor {
   void appliquer(float thr, float p, float r,  float y);
 };
 
-
 #endif

@@ -7,10 +7,12 @@
 // bring in definitions used by the extern declarations
 #include "motorLOGIC.h"   // defines PID, mixMotor
 #include "Radio.h"        // defines Emitor_receptor, update_data, failsafe
+#include "PID.h"          // defines PID class
 
 // here you can adjust the configurations for the drone :
-
-// PID constants :
+// motor 
+extern mixMotor monMix; // global mixer object, declared extern in motorLOGIC.h and defined in config.cpp to avoid multiple-definition errors
+// PID parameters
 extern PID PIDroll;
 extern PID PIDpitch;
 extern PID PIDyaw;

@@ -1,6 +1,4 @@
 #include "config.h"
-#include "motorLOGIC.h"  // PID and mixMotor definitions
-#include "Radio.h"       // Emitor_receptor, update_data, failsafe
 
 // global objects defined in one translation unit to avoid multiple-definition errors
 PID PIDroll(1.0, 0.0, 0.0);

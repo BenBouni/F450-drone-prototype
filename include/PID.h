@@ -2,6 +2,7 @@
 #define PID_H
 
 #include <math.h>
+#include <Arduino.h>
 
 class PID {
   private :

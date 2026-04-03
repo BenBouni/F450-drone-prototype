@@ -19,11 +19,7 @@ class Emitor_receptor {
         unsigned long dernierEnvoi;
     
     public:
-        Emitor_receptor(const int interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) :
-          interval(interval), CE_PIN(CE_PIN), CSN_PIN(CSN_PIN) {
-            memcpy(txAddress, tx, 6);
-            memcpy(rxAddress, rx, 6);
-          }
+        Emitor_receptor(const int interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]);
         
         void begin(); 
         bool receivePacket(received& Packet);

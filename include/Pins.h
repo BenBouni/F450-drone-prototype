@@ -5,20 +5,20 @@
 //here you can adjust the wiring/pins for the drone :
 
 //IMU pins :
-#define SDA_PIN 4
-#define SCL_PIN 5
+const int SDA_PIN = 4;
+const int SCL_PIN = 5;
 
 // radio pins :
-#define CE_PIN 21
-#define CSN_PIN 22
+const int CE_PIN = 21;
+const int CSN_PIN = 22;
 
 // internal led :
-#define LED_PIN 2
+const int LED_PIN = 2;
 
 // Motor pins : 
-#define AV_D 12
-#define AV_G 13
-#define AR_D 14
-#define AR_G 27
+const int AV_D = 12;
+const int AV_G = 13;
+const int AR_D = 14;
+const int AR_G = 27;
 
 #endif
