@@ -4,42 +4,48 @@
 
 // Emitor_receptor implementation
 
-Emitor_receptor::Emitor_receptor(uint8_t cePin, uint8_t csnPin) : radio(cePin, csnPin) {}
+Emitor_receptor::Emitor_receptor(const int interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) : interval(interval), CE_PIN(CE_PIN), CSN_PIN(CSN_PIN), radio(CE_PIN, CSN_PIN) {
+    memcpy(txAddress, tx, 6);
+    memcpy(rxAddress, rx, 6);
+}
 
 void Emitor_receptor::begin() {
-    radio.begin();
-    radio.openReadingPipe(0, address);
-    radio.setPALevel(RF24_PA_HIGH);
-    radio.startListening();
-    dernierEnvoi = millis();
-}
-
-bool Emitor_receptor::receivePacket(ControlData& Packet) {
-    if (radio.available()) {
-        radio.read(&Packet, sizeof(Packet));
-        return true;
-    } else return false;        
-}
-
-bool Emitor_receptor::sendPacket(const DroneData& packetDrone) {
-    dernierEnvoi = millis();
-    radio.stopListening();
-    bool success = radio.write(&packetDrone, sizeof(packetDrone));
-    radio.startListening();
-    return success;
-}
-
-void Emitor_receptor::sendDroneData(const DroneData& packetDrone) {
-    unsigned long currentMillis = millis();
-    if (currentMillis - dernierEnvoi >= interval) {
-        sendPacket(packetDrone);
-        dernierEnvoi = currentMillis;
-    }
-} 
+            if (!radio.begin()) {
+                Serial.println("Radio hardware not responding!");
+                while (1) {} // halt if radio is not working
+            }
+            radio.openReadingPipe(1, rxAddress);
+            radio.openWritingPipe(txAddress);
+            radio.setPALevel(RF24_PA_LOW);
+            radio.startListening();
+            dernierEnvoi = millis();
+        }
+        bool Emitor_receptor::receivePacket(received& Packet) {
+            if (radio.available()) {
+                radio.read(&Packet, sizeof(Packet));
+                return true;
+            }
+            return false;
+        }
+        void Emitor_receptor::sendPacket(const sent& packetSent) {
+            radio.stopListening();
+            radio.write(&packetSent, sizeof(packetSent));
+            radio.startListening();
+        }
+        
+        void Emitor_receptor::alternateSend(const sent& packetSent, received& packetReceived) {
+            unsigned long currentMillis = millis();
+            if (currentMillis - dernierEnvoi >= interval) {
+                sendPacket(packetSent);
+                dernierEnvoi = currentMillis;
+            } 
+                receivePacket(packetReceived);
+            
+        }
 
 // failsafe implementation 
 
-    failsafe::failsafe(unsigned long timeoutmin, unsigned long timeoutmaxs) : timeoutmin(timeoutmin), timeoutmax(timeoutmaxs) {
+    failsafe::failsafe(unsigned long timeoutmin, unsigned long timeoutmax) : timeoutmin(timeoutmin), timeoutmax(timeoutmax) {
       lastSignalTime = millis();
     }
 

@@ -7,7 +7,10 @@ PID PIDroll(1.0, 0.0, 0.0);
 PID PIDpitch(1.0, 0.0, 0.0);
 PID PIDyaw(1.0, 0.0, 0.0);
 
-Emitor_receptor radio(CE_PIN, CSN_PIN);
+uint8_t txAddress[6] = "00001";
+uint8_t rxAddress[6] = "00002";
+
+Emitor_receptor radio(100, CE_PIN, CSN_PIN, txAddress, rxAddress); // instantiate radio object with defined pins and addresses
 update_data data(500);
 failsafe monFailsafe(1000, 10000);
 

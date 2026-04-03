@@ -4,49 +4,32 @@
 #include "data.h"
 #include "motorLOGIC.h"
 
+typedef ControlData received;
+typedef DroneData sent;
+
 
 class Emitor_receptor {
-  public:
-    // role can be changed at runtime if necessary
-    enum Role { TRANSMITTER, RECEIVER };
-
   private:
     RF24 radio;
     uint8_t txAddress[6];               // pipe used when transmitting
     uint8_t rxAddress[6];               // pipe used when listening
-    Role role;                          // current operating mode
-    const unsigned long interval = 100; // sending interval in ms
-    unsigned long dernierEnvoi;
-
-    void configurePipes();              // helper used when role changes
-
-  public:
-    /**
-     * @param cePin, csnPin    SPI pins for the nRF24L01
-     * @param txAddr           address to use when sending
-     * @param rxAddr           address to use when receiving
-     * @param initialRole      start up as transmitter or receiver
-     */
-    Emitor_receptor(uint8_t cePin,
-                    uint8_t csnPin,
-                    const uint8_t txAddr[6],
-                    const uint8_t rxAddr[6],
-                    Role initialRole = RECEIVER);
-
-    void begin();
-
-    /**
-     * Switch the module to the other role on the fly.
-     * Calling this will re‑configure the pipes and start/stop listening
-     * as appropriate. Useful if you want the same board to act as an
-     * RC transmitter one moment and then listen for telemetry later.
-     */
-    void switchRole(Role newRole);
-
-    bool receivePacket(ControlData& Packet);   // valid only when in RECEIVER mode
-    bool sendPacket(const DroneData& packetDrone); // valid only in TRANSMITTER mode
-    void sendDroneData(const DroneData& packetDrone); // helper for periodic sends
-};
+    int CE_PIN ;
+    int CSN_PIN ;
+    unsigned long interval; // sending interval in ms
+        unsigned long dernierEnvoi;
+    
+    public:
+        Emitor_receptor(const int interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) :
+          interval(interval), CE_PIN(CE_PIN), CSN_PIN(CSN_PIN) {
+            memcpy(txAddress, tx, 6);
+            memcpy(rxAddress, rx, 6);
+          }
+        
+        void begin(); 
+        bool receivePacket(received& Packet);
+        void sendPacket(const sent& packetSent);       
+        void alternateSend(const sent& packetSent, received& packetReceived);
+        };
 
 extern Emitor_receptor radio;
 

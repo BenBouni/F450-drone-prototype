@@ -4,6 +4,7 @@
 #include "Radio.h"
 #include "IMU.h"
 #include "data.h"
+#include "PID.h"
 
 void Captor(void * pvParameters);
 void Controll(void * pvParameters);
@@ -80,7 +81,7 @@ void Radiocore(void * Pvparameter) {
         dronepacket.ActualYaw = tele.ActualYaw;
         xSemaphoreGive(xMutexTele);
     }
-      radio.sendDroneData(dronepacket);
+    radio.alternateSend(dronepacket, packetReceived);
     vTaskDelayUntil(&xLastWaketime, frequency_radio);
    }
 }
