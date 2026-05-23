@@ -1,13 +1,13 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-#include "Pins.h"
-#include <Arduino.h>  // provides TickType_t and commonly used types
+#include <Arduino.h>  
 
-// bring in definitions used by the extern declarations
-#include "motorLOGIC.h"   // defines PID, mixMotor
 #include "Radio.h"        // defines Emitor_receptor, update_data, failsafe
 #include "PID.h"          // defines PID class
+#include "Failsafe.h"     // defines failsafe class
+#include "updater.h"      // defines update_data class
+#include "data.h"
 
 // here you can adjust the configurations for the drone :
 // motor 
@@ -18,7 +18,7 @@ extern PID PIDpitch;
 extern PID PIDyaw;
 
 // radio and data objects used by the tasks
-extern Emitor_receptor radio;
+extern Emitor_receptor<ControlData, DroneData> radio;
 extern update_data data; // in ms, to be adjusted according to system requirements
 
 // failsafe delays :

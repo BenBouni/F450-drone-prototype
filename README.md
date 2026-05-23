@@ -264,6 +264,7 @@ Rotations applied in Yaw → Pitch → Roll order.
 - [ ] might add a buzzer for low battery / arming feedback / signal loss warning / calibration status .
 - [ ] might design a cutom controller with it's radio and receive the telemetry directly on the pc without the need of the second esp32 as a bridge so the code can be more universal, but for now the xbox controller is more convenient for testing and tuning .
 - [ ] might add a camera and implement a first-person view (FPV) system, streaming video back to the ground station.
+- [ ] Possibly switching the communication between esp32 and controller to serial instead of blutooth , as the blutooth connection is not very stable and has a lot of latency which makes it hard to tune the PID and BETA parameters, but for now the blutooth connection is more convenient for testing  .
 
 ---
 

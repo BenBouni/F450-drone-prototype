@@ -1,5 +1,5 @@
 #include "motorLOGIC.h"
-#include "Pins.h"
+
 
 // moteur class implementation
   moteur::moteur(const int& pin, const int& canal, float vitesse)

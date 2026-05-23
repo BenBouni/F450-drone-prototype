@@ -14,7 +14,7 @@ class SerialWorker5(QThread):
     data_received = pyqtSignal(list)  # Signal to emit received data
 
 
-    def __init__(self, port='com3', baudrate=115200): #adjust port and baudrate as needed for object self 
+    def __init__(self, port='com5', baudrate=115200): #adjust port and baudrate as needed for object self 
         super().__init__()
         self.running = True
         self.ser = None

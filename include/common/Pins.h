@@ -9,8 +9,12 @@ const int SDA_PIN = 4;
 const int SCL_PIN = 5;
 
 // radio pins :
+//drone side :
 const int CE_PIN = 21;
 const int CSN_PIN = 22;
+//GCS side :
+const int CE_PIn = 21;
+const int CSN_PIn = 22;
 
 // internal led :
 const int LED_PIN = 2;

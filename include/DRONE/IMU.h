@@ -33,7 +33,7 @@ class IMU {
         Wire.beginTransmission(0x68);
         Wire.write(0x3B); // Adresse du registre de début des données
         Wire.endTransmission(false);
-        Wire.requestFrom(0x68, 14, true); // Demander 14 octets
+        Wire.requestFrom(0x68, 14, 1); // Demander 14 octets
 
         accelX = (int16_t)(Wire.read() << 8 | Wire.read());
         accelY = (int16_t)(Wire.read() << 8 | Wire.read());
