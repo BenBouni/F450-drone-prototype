@@ -8,7 +8,6 @@
 #include <Arduino.h>
 #include <RF24.h>
 #include <SPI.h>
-#include <Wire.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -58,7 +57,7 @@ struct RxData { // Rx stands for receive
     float throttle;
     float batteryVoltage;
 };
-RxData packetReceived; // global variable to store the data received from the drone to be printed on the serial monitor
+RxData packetReceived; // global variable to store the data received from the drone and temporarely stocked
 
 struct printData { // data received from the drone to be printed on the serial monitor
     float ActualRoll;
@@ -73,28 +72,37 @@ class Praser {
         rawData controlData;
         char buffer[100];
         int i = 0;
+        int j = 0;
+        int count = 0;
     public:
         void praserData(){
-            if (Serial.available()) {
-                buffer[0] = '\0'; // Clear the buffer
-                int len = Serial.readBytesUntil('\n', buffer, sizeof(buffer) - 1); // Read until newline
-                buffer[len] = '\0'; // Ensure null end
-            
+            while(Serial.available()) {
+                char b = Serial.read();
+                if (b == '\n'){
+                buffer[j] = 0;
                 char* token = strtok(buffer, ",");
-                if (token != NULL && strcmp(token, "GS") == 0) {
-                    i = 0; // Reset i after processing 
-                    token = strtok(NULL, ","); // Get the next token
-                    while (token != NULL) {
-                      float value = atof(token); // Convert the token to a float 
-                        
-                        if (i == 0) controlData.leftStickX = constrain((value / 32768.0f) * a, -a, a); // roll
-                        else if (i == 1) controlData.leftStickY = constrain((value / 32768.0f) * a, -a, a); // pitch
-                        else if (i == 2) controlData.rightStickX = constrain((value / 32768.0f) * a, -a, a); // yaw
-                        else if (i == 3) controlData.rightStickY = constrain((value / 32768.0f) * a, -a, a); // throttle
-                        else if (i == 4) controlData.xboxButton = value; // arming button
-                        token = strtok(NULL, ",");  // not the best logic but it works for now , the controller is sending the data in the format "GS,roll,pitch,yaw,throttle" so we can just use i to determine which value we are parsing and assign it to the correct variable in the controlData struct
-                        i = (i + 1) % 5; // Increment i 
-                    }           
+                    if (token != NULL && strcmp(token, "GS") == 0) {
+                        rawData temp;
+                        i = 0; // Reset i and count after processing 
+                        count = 0;
+                        token = strtok(NULL, ","); // Get the next token
+                        while (token != NULL) {
+                            
+                            float value = atof(token); // Convert the token to a float 
+                            if (i == 0) temp.leftStickX = constrain((value / 32768.0f) * a, -a, a); // roll
+                            else if (i == 1) temp.leftStickY = constrain((value / 32768.0f) * a, -a, a); // pitch
+                            else if (i == 2) temp.rightStickX = constrain((value / 32768.0f) * a, -a, a); // yaw
+                            else if (i == 3) temp.rightStickY = constrain((value / 32768.0f) * a, -a, a); // throttle
+                            else if (i == 4) temp.xboxButton = value; // arming button
+                            token = strtok(NULL, ",");  // not the best logic but it works for now , the controller is sending the data in the format "GS,roll,pitch,yaw,throttle" so we can just use i to determine which value we are parsing and assign it to the correct variable in the controlData struct
+                            i = (i + 1) % 5; // Increment i 
+                            count++;
+                        }  if(count == 5) controlData = temp;         
+                    }
+                    j = 0;
+                } else if (j<sizeof(buffer) - 1) {
+                    buffer[j] = b;
+                    j++;
                 }
             } 
         }
@@ -112,7 +120,8 @@ class Emitor_receptor {
     int CE_PIN ;
     int CSN_PIN ;
     unsigned long interval; // sending interval in ms
-        unsigned long dernierEnvoi;
+    unsigned long dernierEnvoi;
+    bool isListeningState;
     
     public:
         Emitor_receptor(const unsigned long interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) : 
@@ -130,6 +139,7 @@ class Emitor_receptor {
             radio.openWritingPipe(txAddress);
             radio.setPALevel(RF24_PA_LOW);
             radio.startListening();
+            isListeningState = true;
             dernierEnvoi = millis();
         }
         bool receivePacket(received& Packet) {
@@ -141,7 +151,8 @@ class Emitor_receptor {
         }
         void sendPacket(const sent& packetSent) {
             radio.stopListening();
-            radio.startWrite(&packetSent, sizeof(packetSent));
+            isListeningState = false;
+            radio.write(&packetSent, sizeof(packetSent));
         }
         
         void alternateSend(const sent& packetSent, received& packetReceived) {
@@ -150,18 +161,18 @@ class Emitor_receptor {
                 sendPacket(packetSent);
                 dernierEnvoi = currentMillis;
             } 
-            if (!radio.isListening()) {
-                radio.TXStandBy();
+            if (isListeningState != true) {
+                radio.txStandBy();
                 radio.startListening();
+                isListeningState = true;
             }
-                receivePacket(packetReceived);
-            
+                receivePacket(packetReceived);  
         }
         };
 Emitor_receptor<TxData, RxData> radio(10, CE, CSN, (uint8_t*)"00001", (uint8_t*)"00002");
 
 void setup() {
-    Serial.begin(9600);
+    Serial.begin(115200);
     radio.begin();
     xMutexRadio = xSemaphoreCreateMutex();
     xMutexPrinter = xSemaphoreCreateMutex();
@@ -189,7 +200,7 @@ void setup() {
         "PrinterTask",
         10000,
         NULL,
-        2,
+        0,
         NULL,
         1 // run the printer task on core 1
     );
@@ -226,9 +237,6 @@ void RadioTask(void *pvParameters) {
 }
 
 void ControlTask(void *pvParameters) {
-
-
-
     for(;;) {
         if (xSemaphoreTake(xMutexserial, 1) == pdTRUE) {
             
@@ -248,21 +256,18 @@ void ControlTask(void *pvParameters) {
 void PrinterTask(void *pvParameters) {
 
     for(;;) {
-        if (xSemaphoreTake(xMutexPrinter, 1) == pdTRUE && xSemaphoreTake(xMutexserial, 1) == pdTRUE) {
-            Serial.print("Roll: ");
+        if (xSemaphoreTake(xMutexPrinter, 1) == pdTRUE) {
+            Serial.print("GS,");
             Serial.print(print.ActualRoll);
-            Serial.print(" | Pitch: ");
+            Serial.print(",");
             Serial.print(print.ActualPitch);
-            Serial.print(" | Yaw: ");
+            Serial.print(",");
             Serial.print(print.ActualYaw);
-            Serial.print(" | Battery Voltage: ");
+            Serial.print(",");
             Serial.println(print.batteryVoltage);
             xSemaphoreGive(xMutexPrinter);
-            xSemaphoreGive(xMutexserial);
+
         }
         vTaskDelay(frequency_printer); // print every second
     }
 }
-
- 
-// there might be an issue in the printer task 

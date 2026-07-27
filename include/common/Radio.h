@@ -14,10 +14,11 @@ class Emitor_receptor {
     int CE_PIN ;
     int CSN_PIN ;
     unsigned long interval; // sending interval in ms
-        unsigned long dernierEnvoi;
+    unsigned long dernierEnvoi;
+    bool isListening = false;
     
     public:
-        Emitor_receptor(const int interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) : 
+        Emitor_receptor(const unsigned long interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) : 
                 interval(interval), CE_PIN(CE_PIN), CSN_PIN(CSN_PIN), radio(CE_PIN, CSN_PIN) {
           memcpy(txAddress, tx, 6);
           memcpy(rxAddress, rx, 6);
@@ -32,6 +33,7 @@ class Emitor_receptor {
             radio.openWritingPipe(txAddress);
             radio.setPALevel(RF24_PA_LOW);
             radio.startListening();
+            isListening = true;
             dernierEnvoi = millis();
         }
         bool receivePacket(received& Packet) {
@@ -43,7 +45,8 @@ class Emitor_receptor {
         }
         void sendPacket(const sent& packetSent) {
             radio.stopListening();
-            radio.startWrite(&packetSent, sizeof(packetSent));
+            isListening = false;
+            radio.write(&packetSent, sizeof(packetSent));
         }
         
         void alternateSend(const sent& packetSent, received& packetReceived) {
@@ -52,11 +55,13 @@ class Emitor_receptor {
                 sendPacket(packetSent);
                 dernierEnvoi = currentMillis;
             } 
-            if (!radio.isListening()) {
-                radio.TXStandBy();
+            if (isListening == false) {
+                radio.txStandBy();
                 radio.startListening();
+                isListening = true;
             }
                 receivePacket(packetReceived);
+                
             
         }
         };
