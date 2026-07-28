@@ -11,7 +11,8 @@ PID PIDyaw(1.0, 0.0, 0.0);
 uint8_t txAddress[6] = "00001";
 uint8_t rxAddress[6] = "00002";
 
-Emitor_receptor<ControlData, DroneData> radio(100, CE_PIN, CSN_PIN, txAddress, rxAddress); // instantiate radio object with defined pins and addresses
+// Drone sends DroneData (telemetry) and receives ControlData (commands from GCS)
+Emitor_receptor<DroneData, ControlData> radio(100, CE_PIN, CSN_PIN, txAddress, rxAddress); // instantiate radio object with defined pins and addresses
 update_data data(500);
 failsafe monFailsafe(1000, 10000);
 

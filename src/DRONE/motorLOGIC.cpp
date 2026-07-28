@@ -18,6 +18,16 @@
   void moteur::unarmed() {
     estArmer=false;
   } 
+
+  void moteur::stopImmediate() {
+   // mark unarmed and write minimum throttle immediately to ESC
+   estArmer = false;
+   vitesseMoteur = vitesseMin;
+   PWMvalue = (int)((vitesseMoteur - 1000.0f) * 16383.0f / (2000.0f - 1000.0f)); // map 1000..2000 to 0..16383 (14-bit)
+   if (PWMvalue < 0) PWMvalue = 0;
+   if (PWMvalue > 16383) PWMvalue = 16383;
+   ledcWrite(canal, PWMvalue);
+  }
   void moteur::vitCtrl(float vitesseRecue) {
  
     if (estArmer == false) {
@@ -40,8 +50,9 @@
    }
    //protection sup +
    void mixMotor::stopTout() {
-        m_ad.unarmed(); m_ag.unarmed(); 
-        m_dd.unarmed(); m_dg.unarmed();
+       // Ensure motors are immediately set to minimum PWM and marked unarmed for reliable failsafe
+       m_ad.stopImmediate(); m_ag.stopImmediate();
+       m_dd.stopImmediate(); m_dg.stopImmediate();
     }
   void mixMotor::arming() {
     m_ad.armed(); m_ag.armed();

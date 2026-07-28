@@ -8,6 +8,8 @@ void IMU::wire_begin(int sda, int scl) {
     Wire.write(0x6B); // PWR_MGMT_1 register
     Wire.write(0); // Mettre le MPU-6050 en mode actif
     Wire.endTransmission(true);
+    // initialize time reference for dt calculations
+    tempsPrecedent = micros();
 }
 
 void IMU::calibrerIMU() {

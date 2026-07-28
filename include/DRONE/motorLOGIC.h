@@ -25,8 +25,11 @@ class moteur {
   void armed();
 
   void unarmed();
-
+  
   void vitCtrl(float vitesseRecue);
+
+  // immediately write minimum/PWM and mark unarmed (used for failsafe)
+  void stopImmediate();
 };
 
 class mixMotor {

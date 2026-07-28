@@ -33,7 +33,13 @@ class IMU {
         Wire.beginTransmission(0x68);
         Wire.write(0x3B); // Adresse du registre de début des données
         Wire.endTransmission(false);
-        Wire.requestFrom(0x68, 14, 1); // Demander 14 octets
+        Wire.requestFrom(0x68, 14, true); // Demander 14 octets (accel temp gyro)
+
+        // Guard against short reads on the I2C bus
+        if (Wire.available() < 14) {
+            // not enough data received; abort this read to avoid reading garbage
+            return;
+        }
 
         accelX = (int16_t)(Wire.read() << 8 | Wire.read());
         accelY = (int16_t)(Wire.read() << 8 | Wire.read());
@@ -43,11 +49,7 @@ class IMU {
         gyroY = (int16_t)(Wire.read() << 8 | Wire.read());
         gyroZ = (int16_t)(Wire.read() << 8 | Wire.read());
 
-        magX = (int16_t)(Wire.read() << 8 | Wire.read());
-        magY = (int16_t)(Wire.read() << 8 | Wire.read());
-        magZ = (int16_t)(Wire.read() << 8 | Wire.read());
-      
-
+        // MPU-6050 does not provide magnetometer data on these registers; do not read beyond 14 bytes
     }
   public :
   

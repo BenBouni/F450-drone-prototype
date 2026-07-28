@@ -27,7 +27,9 @@ class Emitor_receptor {
         void begin() {
             if (!radio.begin()) {
                 Serial.println("Radio hardware not responding!");
-                while (1) {} // halt if radio is not working
+                // Do not block forever here; allow system to continue in degraded mode.
+                // The caller should handle missing radio (updated flag / failsafe will trigger).
+                return;
             }
             radio.openReadingPipe(1, rxAddress);
             radio.openWritingPipe(txAddress);
@@ -66,7 +68,8 @@ class Emitor_receptor {
         }
         };
 
-extern Emitor_receptor<ControlData, DroneData> radio;
+// On the drone we send DroneData (telemetry) and receive ControlData (commands from GCS)
+extern Emitor_receptor<DroneData, ControlData> radio;
 
 
 

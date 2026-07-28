@@ -73,12 +73,13 @@ void Radiocore(void * Pvparameter) {
       }
     if (xSemaphoreTake(xMutexTele, 0) == pdTRUE) {
         dronepacket.batteryVoltage = 11.1; // to be replaced by actual battery voltage measurement
-        dronepacket.ActualPitch = tele.ActualPitch;
-        dronepacket.ActualRoll = tele.ActualRoll;
-        dronepacket.ActualYaw = tele.ActualYaw;
+        dronepacket.ActualPitch = tele.ActualPitch.load();
+        dronepacket.ActualRoll = tele.ActualRoll.load();
+        dronepacket.ActualYaw = tele.ActualYaw.load();
         xSemaphoreGive(xMutexTele);
     }
-    radio.alternateSend(Packet, dronepacket);
+    // send telemetry (dronepacket) and receive incoming control packet (Packet)
+    radio.alternateSend(dronepacket, Packet);
     vTaskDelayUntil(&xLastWaketime, frequency_radio);  
    }
 }
@@ -112,9 +113,17 @@ void Controll(void * Pvparameter) {
   TickType_t xLastWaketime = xTaskGetTickCount(); // variable to store the last wake time for vTaskDelayUntil
   for(;;){
     if (data.UPDATED()) {
-      float erreurRoll = PIDroll.calcErreur(order.roll, tele.ActualRoll);
-      float erreurPitch = PIDpitch.calcErreur(order.pitch, tele.ActualPitch);
-      float erreurYaw = PIDyaw.calcErreur(order.yaw, tele.ActualYaw );
+      // load atomics into temporaries to pass plain floats to PID
+      float order_roll = order.roll.load();
+      float order_pitch = order.pitch.load();
+      float order_yaw = order.yaw.load();
+      float tele_roll = tele.ActualRoll.load();
+      float tele_pitch = tele.ActualPitch.load();
+      float tele_yaw = tele.ActualYaw.load();
+
+      float erreurRoll = PIDroll.calcErreur(order_roll, tele_roll);
+      float erreurPitch = PIDpitch.calcErreur(order_pitch, tele_pitch);
+      float erreurYaw = PIDyaw.calcErreur(order_yaw, tele_yaw);
       if (xSemaphoreTake(xMutexControll, 1) == pdTRUE) {
         armed = order.armed.load();
         thr = order.thr.load();
