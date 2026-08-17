@@ -16,7 +16,7 @@ class Emitor_receptor {
     unsigned long interval; // sending interval in ms
     unsigned long dernierEnvoi;
     bool isListening = false;
-    
+    bool isInitialized = false;
     public:
         Emitor_receptor(const unsigned long interval, const int CE_PIN, const int CSN_PIN, const uint8_t tx[6], const uint8_t rx[6]) : 
                 interval(interval), CE_PIN(CE_PIN), CSN_PIN(CSN_PIN), radio(CE_PIN, CSN_PIN) {
@@ -25,10 +25,11 @@ class Emitor_receptor {
       }
 
         void begin() {
+            
             if (!radio.begin()) {
                 Serial.println("Radio hardware not responding!");
+                isInitialized = false;
                 // Do not block forever here; allow system to continue in degraded mode.
-                // The caller should handle missing radio (updated flag / failsafe will trigger).
                 return;
             }
             radio.openReadingPipe(1, rxAddress);
@@ -37,21 +38,25 @@ class Emitor_receptor {
             radio.startListening();
             isListening = true;
             dernierEnvoi = millis();
+            isInitialized = true;
         }
         bool receivePacket(received& Packet) {
+            if(isInitialized == false){ return false;}
             if (radio.available()) {
                 radio.read(&Packet, sizeof(Packet));
-                return true;
-            }
-            return false;
+            return true;
+        }
+        return false;
         }
         void sendPacket(const sent& packetSent) {
+            if (!isInitialized) return;
             radio.stopListening();
             isListening = false;
             radio.write(&packetSent, sizeof(packetSent));
         }
         
         void alternateSend(const sent& packetSent, received& packetReceived) {
+            if(!isInitialized) return;
             unsigned long currentMillis = millis();
             if (currentMillis - dernierEnvoi >= interval) {
                 sendPacket(packetSent);

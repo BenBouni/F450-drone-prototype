@@ -16,10 +16,6 @@
       ROLL.store(receivedPacket.roll);
       YAW.store(receivedPacket.yaw);
       ARMED.store(receivedPacket.armed);
-      if (xSemaphoreTake(xMutexFailsafe, 0) == pdTRUE) {
-        monFailsafe.updateSignalTime();
-        xSemaphoreGive(xMutexFailsafe);
-      }
       dernier_update.store(millis());
     }
     // updated flag based on last reception

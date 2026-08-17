@@ -17,8 +17,7 @@ extern PID PIDroll;
 extern PID PIDpitch;
 extern PID PIDyaw;
 
-// radio and data objects used by the tasks
-extern Emitor_receptor<ControlData, DroneData> radio;
+
 extern update_data data; // in ms, to be adjusted according to system requirements
 
 // failsafe delays :

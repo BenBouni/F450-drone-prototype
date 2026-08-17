@@ -29,16 +29,16 @@ class IMU {
 
     unsigned long tempsPrecedent;
 
-    void lireDonneesBrutes() {
+    bool lireDonneesBrutes() {
         Wire.beginTransmission(0x68);
         Wire.write(0x3B); // Adresse du registre de début des données
         Wire.endTransmission(false);
-        Wire.requestFrom(0x68, 14, true); // Demander 14 octets (accel temp gyro)
+        Wire.requestFrom((uint8_t)0x68,(uint8_t) 14,(uint8_t) 1); // Demander 14 octets (accel temp gyro)
 
         // Guard against short reads on the I2C bus
         if (Wire.available() < 14) {
-            // not enough data received; abort this read to avoid reading garbage
-            return;
+            Serial.println("I2C blockage");
+            return false ;
         }
 
         accelX = (int16_t)(Wire.read() << 8 | Wire.read());
@@ -50,10 +50,12 @@ class IMU {
         gyroZ = (int16_t)(Wire.read() << 8 | Wire.read());
 
         // MPU-6050 does not provide magnetometer data on these registers; do not read beyond 14 bytes
+        return true;
     }
   public :
-  
+   
   //calibration de l'imu
+  bool IMU_flag = false;
   void calibrerIMU();
     
     void wire_begin(int sda, int scl);

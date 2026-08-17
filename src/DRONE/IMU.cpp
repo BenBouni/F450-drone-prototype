@@ -18,7 +18,10 @@ void IMU::calibrerIMU() {
     const int nbEchantillons = 500;
 
     for(int i = 0; i < nbEchantillons; i++) {
-        lireDonneesBrutes();
+        if (!lireDonneesBrutes()) {
+            Serial.println("IMU read fail during calibration");
+            break;
+        }
         sommeGx += gyroX;
         sommeGy += gyroY;
         sommeGz += gyroZ;
@@ -125,7 +128,13 @@ void IMU::madgwickUpdate(float gx, float gy, float gz, float ax, float ay, float
 }
 
 float IMU::MettreAjourmesures() {
-        lireDonneesBrutes();
+        if (lireDonneesBrutes() == false) {
+            // I2C read failed — mark IMU as not OK and return an error dt
+            IMU_flag = true;
+            return -1.0f;
+        }
+        // mark IMU OK
+        IMU_flag = false;
         //données calibrées
         gyroX -= erreurGyroX;
         gyroY -= erreurGyroY;
@@ -146,13 +155,38 @@ float IMU::MettreAjourmesures() {
         unsigned long tempsActuel = micros();
         float diffTemps = tempsActuel - tempsPrecedent;
         tempsPrecedent = tempsActuel;
-        float dt = diffTemps/1000000.0;
-        dt = max(0.0001f, dt); // éviter les divisions par zéro dans le filtre de Madgwick
-        madgwickUpdate(gyroX, gyroY, gyroZ, accelX, accelY, accelZ, dt);
+       float dt = diffTemps/1000000.0f;
+       if (!isfinite(dt) || dt <= 0.0f) {
+           dt = 0.01f;
+       }
+       dt = max(0.0001f, dt); // éviter les divisions par zéro dans le filtre de Madgwick
+       madgwickUpdate(gyroX, gyroY, gyroZ, accelX, accelY, accelZ, dt);
+       if (!isfinite(angleRoll) || !isfinite(anglePitch) || !isfinite(angleYaw)) {
+           IMU_flag = true;
+           return -1.0f;
+       }
  // Retourner les données brutes calibrées pour le filtre de Madgwick
-       return dt;
-      }   
+      return dt;
+     }   
     
-    float IMU::getAngleRoll() { return angleRoll; }
-    float IMU::getAnglePitch() { return anglePitch; }  
-    float IMU::getAngleYaw() { return angleYaw; }
+   float IMU::getAngleRoll() {
+       if (!isfinite(angleRoll)) {
+           IMU_flag = true;
+           return 0.0f;
+       }
+       return angleRoll;
+   }
+   float IMU::getAnglePitch() {
+       if (!isfinite(anglePitch)) {
+           IMU_flag = true;
+           return 0.0f;
+       }
+       return anglePitch;
+   }
+   float IMU::getAngleYaw() {
+       if (!isfinite(angleYaw)) {
+           IMU_flag = true;
+           return 0.0f;
+       }
+       return angleYaw;
+   }

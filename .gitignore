@@ -5,3 +5,4 @@ obj/
 *.exe
 *.pyc
 __pycache__/
+settings.json

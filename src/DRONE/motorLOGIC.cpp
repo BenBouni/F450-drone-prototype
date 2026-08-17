@@ -1,6 +1,17 @@
 #include "motorLOGIC.h"
 
 
+// Helper: convert microseconds high time to LEDC duty (14-bit, 50Hz)
+static inline int micros_to_duty(unsigned long us) {
+  const int RES = 14;
+  const int MAX_DUTY = (1<<RES) - 1; // 16383
+  const unsigned long PERIOD_US = 20000UL; // 20 ms
+  long v = (long)roundf((float)us * (float)MAX_DUTY / (float)PERIOD_US);
+  if (v < 0) v = 0;
+  if (v > MAX_DUTY) v = MAX_DUTY;
+  return (int)v;
+}
+
 // moteur class implementation
   moteur::moteur(const int& pin, const int& canal, float vitesse)
   : Moteur_pin(pin), canal(canal), vitesseMoteur(vitesse) {
@@ -10,7 +21,7 @@
      pinMode(Moteur_pin, OUTPUT);
      ledcSetup(canal, 50, 14); // 50 Hz, 14-bit resolution
      ledcAttachPin(Moteur_pin, canal);
-     ledcWrite(canal, 0); // Démarre à 0% de duty cycle (moteur éteint)
+     ledcWrite(canal, 0); // Démarre a 0 de duty cycle (moteur éteint)
   }
   void moteur::armed() {
     estArmer=true;
@@ -23,9 +34,7 @@
    // mark unarmed and write minimum throttle immediately to ESC
    estArmer = false;
    vitesseMoteur = vitesseMin;
-   PWMvalue = (int)((vitesseMoteur - 1000.0f) * 16383.0f / (2000.0f - 1000.0f)); // map 1000..2000 to 0..16383 (14-bit)
-   if (PWMvalue < 0) PWMvalue = 0;
-   if (PWMvalue > 16383) PWMvalue = 16383;
+   PWMvalue = micros_to_duty((unsigned long)vitesseMoteur); // convert µs to 14-bit duty
    ledcWrite(canal, PWMvalue);
   }
   void moteur::vitCtrl(float vitesseRecue) {
@@ -36,8 +45,8 @@
     } else {
       vitesseMoteur = constrain(vitesseRecue, vitesseMin, vitesseMax);
     }
-    // speed convertion to PWM value for the ESC 
-    PWMvalue = 16384*(vitesseMoteur/20000.0); // 14-bit resolution
+    // speed conversion to PWM value for the ESC (vitesseMoteur is in µs)
+    PWMvalue = micros_to_duty((unsigned long)vitesseMoteur); // 14-bit resolution
     ledcWrite(canal, PWMvalue);
   }
 
@@ -59,10 +68,10 @@
     m_dd.armed(); m_dg.armed();
     }
   void mixMotor::appliquer(float thr, float p, float r,  float y) {
-    thr = constrain(thr, 1000,1600);p = constrain(p, 0,100);r = constrain(r, 0,100);y = constrain(y, 0,100);
-    m_ag.vitCtrl(constrain(thr + p + r + y, 1000, 2000));
-    m_ad.vitCtrl(constrain(thr + p - r - y, 1000, 2000)); 
-    m_dg.vitCtrl(constrain(thr - p + r - y, 1000, 2000)); 
-    m_dd.vitCtrl(constrain(thr - p - r + y, 1000, 2000));
+    thr = constrain(thr, 1100,1600);p = constrain(p, -100,100);r = constrain(r, -100,100);y = constrain(y, -100,100);
+    m_ag.vitCtrl(constrain(thr + p + r + y, 1100, 2000));
+    m_ad.vitCtrl(constrain(thr + p - r - y, 1100, 2000)); 
+    m_dg.vitCtrl(constrain(thr - p + r - y, 1100, 2000)); 
+    m_dd.vitCtrl(constrain(thr - p - r + y, 1100, 2000));
   }
 
